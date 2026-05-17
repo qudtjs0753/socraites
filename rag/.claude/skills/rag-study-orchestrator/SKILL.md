@@ -164,6 +164,49 @@ Agent(
     └─ 학습 세션 → Agent(해당 튜터) → _workspace/{topic}.md
 ```
 
+## 환경 제약 — 에이전트 필수 준수 사항
+
+**폐쇄망**: `pip install`은 가능. 외부 API(OpenAI 등) 사용 불가 가능. HuggingFace 모델·Docker 이미지는 외부 다운로드 필요.
+
+모든 에이전트는 코드 예제 작성 시 다음을 준수한다:
+
+1. **LLM/임베딩 초기화** — 반드시 아래 표준 패턴 사용. 특정 API에 하드코딩 금지:
+   ```python
+   import os
+   from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+   # .env에서 사내 LLM 설정 → 엔드포인트만 바꾸면 어디서나 동작
+   llm = ChatOpenAI(
+       base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+       api_key=os.getenv("LLM_API_KEY"),
+       model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+       temperature=0,
+   )
+   embeddings = OpenAIEmbeddings(
+       base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
+       api_key=os.getenv("LLM_API_KEY"),
+       model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+   )
+   ```
+
+2. **HuggingFace 모델** — 오프라인 절차 블록 추가:
+   ```
+   > **오프라인 다운로드 필요**
+   > 외부 PC: `huggingface-cli download {모델명} --local-dir ./모델명`
+   > 폴더를 압축 후 메일로 전달받아 동일 경로에 압축 해제
+   ```
+
+3. **Reranking** — Cohere API(외부망 가능 시)와 BGE 리랭커(오프라인) 양쪽 모두 제시
+
+4. **Docker 이미지** (Level 4) — `docker save`/`docker load` 절차 필수 포함:
+   ```bash
+   # 외부 PC (인터넷 가능)
+   docker pull {이미지}:{태그} && docker save -o {파일명}.tar {이미지}:{태그}
+   # 내부 PC (메일 전달 후)
+   docker load -i {파일명}.tar
+   ```
+
+5. **Kind 이미지** — `kindest/node` 이미지 오프라인 로드 절차 포함
+
 ## 에러 핸들링
 
 | 상황 | 전략 |

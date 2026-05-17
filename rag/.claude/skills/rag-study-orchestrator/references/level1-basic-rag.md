@@ -43,10 +43,18 @@
 
 **실습 1: 임베딩 직접 확인**
 ```python
-# pip install openai
+# pip install openai python-dotenv
+import os
+from dotenv import load_dotenv
 from openai import OpenAI
 
-client = OpenAI()
+load_dotenv()
+
+client = OpenAI(
+    base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.getenv("LLM_API_KEY"),
+)
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
 # 두 문장의 임베딩 유사도 비교
 texts = [
@@ -56,7 +64,7 @@ texts = [
 ]
 
 embeddings = [
-    client.embeddings.create(input=t, model="text-embedding-3-small").data[0].embedding
+    client.embeddings.create(input=t, model=EMBED_MODEL).data[0].embedding
     for t in texts
 ]
 
@@ -120,7 +128,20 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 
-load_dotenv()  # .env 파일에서 OPENAI_API_KEY 로딩
+load_dotenv()
+
+# 사내 LLM / 임베딩 설정 — .env만 수정하면 어떤 OpenAI 호환 서버에도 연결
+llm = ChatOpenAI(
+    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+    temperature=0,
+)
+embeddings = OpenAIEmbeddings(
+    base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+)
 
 # 1. 문서 로딩 및 청킹
 loader = PyPDFLoader("your_document.pdf")
@@ -131,13 +152,13 @@ chunks = RecursiveCharacterTextSplitter(
 # 2. 벡터 DB 구축 (첫 실행 후 persist_directory 지정으로 재사용)
 vectorstore = Chroma.from_documents(
     documents=chunks,
-    embedding=OpenAIEmbeddings(model="text-embedding-3-small"),
+    embedding=embeddings,
     persist_directory="./chroma_db"
 )
 
 # 3. RAG 체인 구성
 qa_chain = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+    llm=llm,
     chain_type="stuff",   # 검색된 모든 청크를 하나의 프롬프트에 넣기
     retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
     return_source_documents=True  # 근거 문서 반환
@@ -162,9 +183,14 @@ from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 
 # 이미 만들어진 vectorstore 로딩 (임베딩 재계산 없음)
+embeddings = OpenAIEmbeddings(
+    base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+)
 vectorstore = Chroma(
     persist_directory="./chroma_db",
-    embedding_function=OpenAIEmbeddings(model="text-embedding-3-small")
+    embedding_function=embeddings,
 )
 
 # 검색 타입 비교
@@ -229,8 +255,14 @@ PROMPT = PromptTemplate(
     input_variables=["context", "question"]
 )
 
+llm = ChatOpenAI(
+    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+    temperature=0,
+)
 qa_chain = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+    llm=llm,
     chain_type="stuff",
     retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
     chain_type_kwargs={"prompt": PROMPT},

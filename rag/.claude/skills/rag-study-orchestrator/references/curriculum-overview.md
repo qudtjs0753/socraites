@@ -70,25 +70,39 @@ Level 1 (2주)          Level 2 (3주)          Level 3 (3주)          Level 4 
 
 ## 기술 스택 전체 맵
 
+> **폐쇄망 환경**: `pip install`은 가능. HuggingFace 모델 가중치·Docker 이미지는 외부 PC에서 다운로드 후 메일 전달 필요. 커리큘럼 작성 시 해당 항목에 오프라인 설치 절차를 반드시 포함하라.
+
 ```
 RAG 애플리케이션 레이어
 ├── Framework:     LangChain, LlamaIndex
-├── LLM:          OpenAI GPT-4o, Claude, HuggingFace
-├── Embedding:    OpenAI text-embedding-3-small, BGE, sentence-transformers
-└── Evaluation:   RAGAS, LangSmith
+├── LLM:          사내 LLM (OpenAI 호환 API) ✓ | OpenAI GPT-4o (외부망 가능 시) | HuggingFace 로컬 [오프라인 다운로드]
+├── Embedding:    사내 임베딩 (OpenAI 호환 API) ✓ | OpenAI API (외부망 가능 시) | BGE [오프라인 다운로드]
+└── Evaluation:   RAGAS (pip) ✓ | LangSmith (API) ✓
 
 검색/저장 레이어
-├── 벡터 검색:    Chroma DB, Qdrant, FAISS
-├── 렉시컬 검색:  Elasticsearch (BM25 + Nori)
-└── 하이브리드:   EnsembleRetriever (LangChain), ES kNN+BM25
+├── 벡터 검색:    Chroma DB (pip) ✓ | FAISS (pip) ✓
+├── 렉시컬 검색:  Elasticsearch [Docker 이미지 오프라인 필요]
+└── 하이브리드:   EnsembleRetriever (LangChain) ✓ | ES kNN+BM25
 
-인프라 레이어 (Level 4)
-├── 컨테이너:     Docker
-├── 오케스트레이션: Kubernetes (Kind 로컬)
-├── 패키지 관리:  Helm
-├── 모니터링:    Prometheus + Grafana
-└── MLOps:       MLflow (선택)
+인프라 레이어 (Level 4)                    ← 모두 Docker 이미지 오프라인 필요
+├── 컨테이너:     Docker [이미지 docker save → 메일 전달]
+├── 오케스트레이션: Kubernetes / Kind [이미지 포함]
+├── 패키지 관리:  Helm [오프라인 저장소 설정 필요]
+├── 모니터링:    Prometheus + Grafana [이미지 오프라인]
+└── MLOps:       MLflow (선택) [이미지 오프라인]
 ```
+
+### 오프라인 전달 대상 목록
+
+| 항목 | 종류 | 외부 다운로드 방법 |
+|------|------|----------------|
+| `BAAI/bge-reranker-v2-m3` | HuggingFace 모델 | `huggingface-cli download BAAI/bge-reranker-v2-m3` |
+| `BAAI/bge-m3` | HuggingFace 모델 | `huggingface-cli download BAAI/bge-m3` |
+| Elasticsearch 8.x | Docker 이미지 | `docker pull elasticsearch:8.15.0 && docker save -o es.tar elasticsearch:8.15.0` |
+| Kibana 8.x | Docker 이미지 | 동일 방식 |
+| Prometheus | Docker 이미지 | `docker pull prom/prometheus && docker save -o prometheus.tar prom/prometheus` |
+| Grafana | Docker 이미지 | 동일 방식 |
+| Kind node image | Docker 이미지 | `docker pull kindest/node:v1.31.0 && docker save ...` |
 
 ---
 

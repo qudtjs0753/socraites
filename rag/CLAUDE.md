@@ -12,6 +12,51 @@
 - **AIOps**: K8S/Kind 운영 경험 있음
 - **DA**: Chroma DB, Elasticsearch 운영 경험 있음
 
+## 환경 제약
+
+**폐쇄망**: 외부 인터넷 접근 제한. 에이전트는 아래 규칙을 반드시 준수하라.
+
+| 구분 | 가능 여부 | 비고 |
+|------|---------|------|
+| `pip install` | 가능 | 내부 PyPI 미러 사용 |
+| 사내 LLM API 호출 | 가능 | OpenAI 호환 엔드포인트 사용 |
+| OpenAI / Cohere 외부 API | 미확인 | 사내 정책에 따라 불가할 수 있음 |
+| HuggingFace 모델 가중치 | **불가** | 외부 PC에서 다운로드 → 메일로 전달 필요 |
+| Docker 이미지 pull | **불가** | 외부 PC에서 `docker save` → 메일로 전달 필요 |
+
+**LLM/임베딩 표준 초기화 패턴** — 모든 코드 예제에 이 패턴을 사용하라:
+
+```python
+# .env
+# LLM_BASE_URL=http://사내-llm-서버/v1
+# LLM_API_KEY=사내키
+# LLM_MODEL=모델명
+# EMBED_BASE_URL=http://사내-임베딩-서버/v1
+# EMBED_MODEL=임베딩-모델명
+import os
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+llm = ChatOpenAI(
+    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+    temperature=0,
+)
+embeddings = OpenAIEmbeddings(
+    base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+)
+```
+
+이 패턴은 사내 LLM, vLLM, Ollama, OpenAI 등 OpenAI-호환 엔드포인트 어디에나 `.env`만 수정하여 연결된다.
+
+**에이전트 지침:**
+- 모든 LLM/임베딩 초기화는 위 표준 패턴 사용 — `ChatOpenAI(model="gpt-4o-mini")` 같은 하드코딩 금지
+- HuggingFace 모델이 필요한 실습에는 `> 오프라인 다운로드 필요` 블록과 다운로드 방법을 함께 제시
+- Docker 이미지가 필요한 실습에는 `docker save`/`docker load` 절차를 포함
+- Reranking: Cohere API(외부망 가능 시) 또는 BGE 리랭커(오프라인) 중 선택 안내
+
 ## 에이전트 팀
 
 | 에이전트 | 역할 |
