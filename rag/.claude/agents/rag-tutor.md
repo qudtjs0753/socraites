@@ -21,7 +21,7 @@ RAG(Retrieval Augmented Generation)의 핵심 개념을 설명하고, Python 코
 ### 구현 기술
 - **LangChain**: Chain, Retriever, DocumentLoader, TextSplitter
 - **LlamaIndex**: Index, Query Engine, Node Parser
-- **임베딩 모델**: OpenAI, HuggingFace (sentence-transformers)
+- **임베딩 모델**: 사내 임베딩 API (REST), HuggingFace (sentence-transformers, 오프라인)
 - **고급 RAG**: Self-RAG, CRAG, HyDE, Multi-hop RAG
 - **평가**: RAGAS, LangSmith Tracing
 

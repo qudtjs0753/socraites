@@ -39,22 +39,31 @@
 **임베딩(Embedding)이란?**
 - 텍스트를 숫자 벡터로 변환: "RAG는 검색 기반 생성 기법입니다" → [0.12, -0.34, 0.56, ...]
 - 의미가 비슷한 텍스트 = 벡터 거리가 가깝다
-- OpenAI `text-embedding-3-small` → 1536차원 벡터
+- 사내 임베딩 모델 → 벡터 차원은 모델에 따라 다름 (`EMBED_MODEL` 환경변수로 지정)
 
 **실습 1: 임베딩 직접 확인**
 ```python
-# pip install openai python-dotenv
+# pip install requests python-dotenv numpy
 import os
+import requests
+import numpy as np
 from dotenv import load_dotenv
-from openai import OpenAI
 
 load_dotenv()
 
-client = OpenAI(
-    base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
-    api_key=os.getenv("LLM_API_KEY"),
-)
-EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
+EMBED_BASE_URL = os.getenv("EMBED_BASE_URL")
+EMBED_API_KEY  = os.getenv("EMBED_API_KEY", os.getenv("LLM_API_KEY", ""))
+EMBED_MODEL    = os.getenv("EMBED_MODEL")
+
+def get_embedding(text: str) -> list[float]:
+    resp = requests.post(
+        f"{EMBED_BASE_URL}/embeddings",
+        json={"model": EMBED_MODEL, "input": text},
+        headers={"Authorization": f"Bearer {EMBED_API_KEY}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["data"][0]["embedding"]
 
 # 두 문장의 임베딩 유사도 비교
 texts = [
@@ -63,12 +72,7 @@ texts = [
     "오늘 날씨가 맑습니다",                      # 다른 의미
 ]
 
-embeddings = [
-    client.embeddings.create(input=t, model=EMBED_MODEL).data[0].embedding
-    for t in texts
-]
-
-import numpy as np
+embeddings = [np.array(get_embedding(t)) for t in texts]
 
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
@@ -81,7 +85,7 @@ print(f"문장 1-3 유사도: {cosine_similarity(embeddings[0], embeddings[2]):.
 
 **설치:**
 ```bash
-pip install langchain langchain-openai langchain-community chromadb pypdf python-dotenv
+pip install langchain langchain-core langchain-community langchain-chroma chromadb pypdf python-dotenv requests numpy
 ```
 
 **Document Loader — 문서 읽기:**
@@ -119,28 +123,28 @@ print(f"청크 예시: {chunks[0].page_content}")
 ### Day 5-7: 첫 RAG 파이프라인 완성
 
 ```python
-# pip install langchain langchain-openai chromadb pypdf python-dotenv
+# pip install langchain langchain-core langchain-community langchain-chroma chromadb pypdf python-dotenv requests
 import os
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
+from internal_llm import InternalChatLLM, InternalEmbeddings  # 공통 모듈
 
 load_dotenv()
 
-# 사내 LLM / 임베딩 설정 — .env만 수정하면 어떤 OpenAI 호환 서버에도 연결
-llm = ChatOpenAI(
-    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+# 사내 LLM / 임베딩 초기화 — .env의 URL·키·모델명만 맞추면 동작
+llm = InternalChatLLM(
+    base_url=os.getenv("LLM_BASE_URL"),
     api_key=os.getenv("LLM_API_KEY"),
-    model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+    model_name=os.getenv("LLM_MODEL"),
     temperature=0,
 )
-embeddings = OpenAIEmbeddings(
-    base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
-    api_key=os.getenv("LLM_API_KEY"),
-    model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+embeddings = InternalEmbeddings(
+    base_url=os.getenv("EMBED_BASE_URL"),
+    api_key=os.getenv("EMBED_API_KEY", os.getenv("LLM_API_KEY", "")),
+    model=os.getenv("EMBED_MODEL"),
 )
 
 # 1. 문서 로딩 및 청킹
@@ -179,14 +183,14 @@ print(f"근거 문서: {[d.metadata for d in result['source_documents']]}")
 **기존 Chroma DB 재사용 (임베딩 비용 절약):**
 ```python
 import chromadb
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
+from internal_llm import InternalEmbeddings  # 공통 모듈
 
 # 이미 만들어진 vectorstore 로딩 (임베딩 재계산 없음)
-embeddings = OpenAIEmbeddings(
-    base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
-    api_key=os.getenv("LLM_API_KEY"),
-    model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+embeddings = InternalEmbeddings(
+    base_url=os.getenv("EMBED_BASE_URL"),
+    api_key=os.getenv("EMBED_API_KEY", os.getenv("LLM_API_KEY", "")),
+    model=os.getenv("EMBED_MODEL"),
 )
 vectorstore = Chroma(
     persist_directory="./chroma_db",
@@ -235,6 +239,7 @@ results = collection.query(
 ```python
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
+from internal_llm import InternalChatLLM  # 공통 모듈
 
 prompt_template = """당신은 주어진 컨텍스트만 사용하여 질문에 답하는 전문가입니다.
 
@@ -255,10 +260,10 @@ PROMPT = PromptTemplate(
     input_variables=["context", "question"]
 )
 
-llm = ChatOpenAI(
-    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+llm = InternalChatLLM(
+    base_url=os.getenv("LLM_BASE_URL"),
     api_key=os.getenv("LLM_API_KEY"),
-    model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+    model_name=os.getenv("LLM_MODEL"),
     temperature=0,
 )
 qa_chain = RetrievalQA.from_chain_type(

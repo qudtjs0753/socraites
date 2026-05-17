@@ -43,11 +43,11 @@ fixed_splitter = RecursiveCharacterTextSplitter(
 ```python
 # pip install langchain-experimental
 from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai import OpenAIEmbeddings
+from internal_llm import InternalEmbeddings  # 공통 모듈
 
 # 임베딩 유사도 기반으로 의미가 끊기는 지점에서 분리
 semantic_splitter = SemanticChunker(
-    embeddings=OpenAIEmbeddings(),
+    embeddings=embeddings,  # InternalEmbeddings 인스턴스
     breakpoint_threshold_type="percentile",  # 상위 95% 변화점에서 분리
     breakpoint_threshold_amount=95
 )
@@ -105,7 +105,7 @@ recursive_splitter = RecursiveCharacterTextSplitter(
 # 동일 질문으로 각 청킹 전략의 Recall 비교
 def evaluate_chunking_strategy(splitter, docs, test_queries, ground_truth_docs):
     chunks = splitter.split_documents(docs)
-    vs = Chroma.from_documents(chunks, OpenAIEmbeddings())
+    vs = Chroma.from_documents(chunks, embeddings)  # InternalEmbeddings 인스턴스
     
     recalls = []
     for query, gt_ids in zip(test_queries, ground_truth_docs):
@@ -202,13 +202,13 @@ es.indices.create(index="rag-ko", body=index_settings, ignore=400)
 ```python
 # pip install langchain-elasticsearch
 from langchain_elasticsearch import ElasticsearchStore
-from langchain_openai import OpenAIEmbeddings
+from internal_llm import InternalEmbeddings  # 공통 모듈
 
 # Elasticsearch 벡터스토어 (LangChain 통합)
 es_store = ElasticsearchStore(
     es_url="http://localhost:9200",
     index_name="rag-ko",
-    embedding=OpenAIEmbeddings(model="text-embedding-3-small"),
+    embedding=embeddings,  # InternalEmbeddings 인스턴스
     # BM25 + 벡터 하이브리드 내장 지원
     strategy=ElasticsearchStore.ApproxRetrievalStrategy(
         hybrid=True  # kNN + BM25 자동 혼합
@@ -257,13 +257,13 @@ results = bm25_retriever.invoke("검색 증강 생성")
 ```python
 from langchain.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
+from internal_llm import InternalEmbeddings  # 공통 모듈
 
 # 두 리트리버 구성
 vector_retriever = Chroma(
     persist_directory="./chroma_db",
-    embedding_function=OpenAIEmbeddings()
+    embedding_function=embeddings,  # InternalEmbeddings 인스턴스
 ).as_retriever(search_kwargs={"k": 5})
 
 bm25_retriever = BM25Retriever.from_documents(chunks)
@@ -281,31 +281,11 @@ results = ensemble.invoke("한국어 RAG 구현 방법")
 
 ### Reranking — 검색 후 재순위
 
-```python
-# pip install cohere
-import cohere
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain_cohere import CohereRerank
+> **오프라인 다운로드 필요**
+> 외부 PC: `huggingface-cli download BAAI/bge-reranker-v2-m3 --local-dir ./bge-reranker-v2-m3`
+> 폴더를 압축 후 메일로 전달받아 동일 경로에 압축 해제
 
-# 1단계: 후보 검색 (많이)
-base_retriever = ensemble  # 앙상블 리트리버 (20개 후보)
-
-# 2단계: Reranker로 재순위 (상위 5개 선택)
-reranker = CohereRerank(
-    model="rerank-multilingual-v3.0",  # 한국어 지원
-    top_n=5
-)
-
-compression_retriever = ContextualCompressionRetriever(
-    base_compressor=reranker,
-    base_retriever=base_retriever
-)
-
-# 사용
-final_results = compression_retriever.invoke("RAG 평가 방법")
-```
-
-**BGE Reranker (무료 오픈소스 대안):**
+**BGE Reranker (오프라인 오픈소스):**
 ```python
 # pip install FlagEmbedding
 from FlagEmbedding import FlagReranker
@@ -330,7 +310,7 @@ top5 = sorted_docs[:5]
 요구사항:
 1. 한국어 PDF/텍스트 문서 사용
 2. Chroma(벡터) + BM25(렉시컬) 앙상블 리트리버
-3. BGE Reranker로 최종 5개 선택
+3. BGE Reranker(오프라인 다운로드)로 최종 5개 선택
 4. Level 1 기본 벡터 검색 대비 Recall@5 측정 비교
 
 기대 결과:

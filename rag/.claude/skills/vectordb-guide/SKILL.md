@@ -119,7 +119,7 @@ mapping = {
             },
             "content_vector": {
                 "type": "dense_vector",
-                "dims": 1536,          # OpenAI text-embedding-3-small
+                "dims": 1536,          # 사내 임베딩 모델 차원 — EMBED_MODEL에 맞게 조정
                 "index": True,
                 "similarity": "cosine"
             },

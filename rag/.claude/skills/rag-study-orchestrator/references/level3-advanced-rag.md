@@ -34,12 +34,16 @@
 ### LangGraph 기반 Self-RAG
 
 ```python
-# pip install langgraph langchain langchain-openai chromadb
+# pip install langgraph langchain langchain-core langchain-community requests
+import os
 from typing import TypedDict, List, Optional
+from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
-from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from internal_llm import InternalChatLLM  # 공통 모듈
+
+load_dotenv()
 
 # --- 상태 정의 ---
 class RAGState(TypedDict):
@@ -52,7 +56,12 @@ class RAGState(TypedDict):
     loop_count: int  # 무한 루프 방지
 
 # --- LLM 그레이더 ---
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm = InternalChatLLM(
+    base_url=os.getenv("LLM_BASE_URL"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model_name=os.getenv("LLM_MODEL"),
+    temperature=0,
+)
 
 def check_retrieval_needed(state: RAGState) -> RAGState:
     """이 질문이 검색을 필요로 하는가?"""
@@ -199,11 +208,19 @@ def crag_retrieve(state: RAGState) -> RAGState:
 **해결:** 질문에 대한 가상의 답변을 생성 → 그 답변으로 검색.
 
 ```python
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+import os
+from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from internal_llm import InternalChatLLM, InternalEmbeddings  # 공통 모듈
 
-llm = ChatOpenAI(model="gpt-4o-mini")
+load_dotenv()
+llm = InternalChatLLM(
+    base_url=os.getenv("LLM_BASE_URL"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model_name=os.getenv("LLM_MODEL"),
+    temperature=0,
+)
 
 # 1단계: 가상 답변 생성
 hyde_prompt = ChatPromptTemplate.from_template(
@@ -326,12 +343,12 @@ eval_dataset = {
 
 dataset = Dataset.from_dict(eval_dataset)
 
-# 평가 실행 (GPT-4o 사용 권장 — 더 정확한 평가)
+# 평가 실행 — 사내 LLM/임베딩 인스턴스 전달
 result = evaluate(
     dataset=dataset,
     metrics=[faithfulness, answer_relevancy, context_recall, context_precision],
-    llm=ChatOpenAI(model="gpt-4o"),
-    embeddings=OpenAIEmbeddings()
+    llm=llm,           # InternalChatLLM 인스턴스
+    embeddings=embeddings,  # InternalEmbeddings 인스턴스
 )
 
 print(result)

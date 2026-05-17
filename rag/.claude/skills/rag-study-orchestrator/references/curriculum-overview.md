@@ -75,8 +75,8 @@ Level 1 (2주)          Level 2 (3주)          Level 3 (3주)          Level 4 
 ```
 RAG 애플리케이션 레이어
 ├── Framework:     LangChain, LlamaIndex
-├── LLM:          사내 LLM (OpenAI 호환 API) ✓ | OpenAI GPT-4o (외부망 가능 시) | HuggingFace 로컬 [오프라인 다운로드]
-├── Embedding:    사내 임베딩 (OpenAI 호환 API) ✓ | OpenAI API (외부망 가능 시) | BGE [오프라인 다운로드]
+├── LLM:          사내 LLM (REST API, requests 직접 호출) ✓ | HuggingFace 로컬 [오프라인 다운로드]
+├── Embedding:    사내 임베딩 (REST API, requests 직접 호출) ✓ | BGE [오프라인 다운로드]
 └── Evaluation:   RAGAS (pip) ✓ | LangSmith (API) ✓
 
 검색/저장 레이어
