@@ -12,8 +12,8 @@
 | 단계 | 주제 | 예상 기간 | 상태 |
 |------|------|----------|------|
 | Stage 0 | JS 필수 개념 속성 정리 | 2~3일 | ✅ |
-| Stage 1 | React 기초 | 2주 | 🔄 진행 중 |
-| Stage 2 | React 심화 | 1주 | ⬜ |
+| Stage 1 | React 기초 | 2주 | ✅ |
+| Stage 2 | React 심화 | 1주 | 🔄 진행 중 |
 | Stage 3 | Next.js App Router | 2주 | ⬜ |
 | Stage 4 | TanStack Query | 1주 | ⬜ |
 | Stage 5 | Tailwind CSS | 4일 | ⬜ |
@@ -24,21 +24,21 @@
 
 ---
 
-## 현재 단계: Stage 1 — React 기초
+## 현재 단계: Stage 2 — React 심화
 
-### 완료
+### Stage 1 완료 내역
 - [x] JS 필수 문법 4가지 (화살표 함수, 구조 분해, map, async/await)
 - [x] 컴포넌트, JSX, useState 이해
 - [x] 실습: Counter 앱
+- [x] props, 리스트 렌더링, 조건부 렌더링
+- [x] 실습: Todo 앱 (localStorage 연동 포함)
+- [x] useEffect 기초 (의존성 배열, 실행 순서, localStorage 연동에서 실습)
 
-### 진행 중: props + 리스트 렌더링 + 조건부 렌더링
-- [ ] props: 컴포넌트 간 데이터 전달
-- [ ] 리스트 렌더링: map + key
-- [ ] 조건부 렌더링: &&, 삼항 연산자
-- [ ] 실습: Todo 앱 (로컬 state)
-
-### 남은 Stage 1 주제
-- [ ] useEffect 기초 (컴포넌트 생명주기)
+### Stage 2 주제
+- [ ] useEffect 심화 (cleanup, 타이머, 이벤트 리스너)
+- [ ] 커스텀 훅 (useLocalStorage 등 로직 재사용)
+- [ ] Context API (전역 상태 관리)
+- [ ] 실습: 심화 앱
 
 ---
 

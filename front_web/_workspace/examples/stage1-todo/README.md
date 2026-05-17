@@ -92,6 +92,42 @@ document.getElementById('todo-1').style.display = 'none';
 const visibleTodos = todos.filter(t => !t.completed);
 ```
 
-CSS 방식이 "틀린" 건 아니지만 React의 약속("데이터가 항상 진실의 원천")을 깬다. 앱이 커질수록 화면과 데이터가 따로 노는 순간 디버깅이 어려워진다.
+CSS 방식이 "틀린" 건 아니지만 React의 약속("데이터가 항상 진실의 원천")을 깬다.
+앱이 커질수록 화면과 데이터가 따로 노는 순간 디버깅이 어려워진다.
 
-**실용적으로도 데이터 방식이 나은 이유:** 미완료 항목 개수를 표시하는 기능을 추가한다면, CSS 방식은 숨긴 것도 세야 하는지 헷갈리지만 React 방식은 `todos.filter(t => !t.completed).length`로 끝난다.
+**실용적으로도 데이터 방식이 나은 이유:** 미완료 항목 개수를 표시하는 기능을 추가한다면,
+CSS 방식은 숨긴 것도 세야 하는지 헷갈리지만 React 방식은 `todos.filter(t => !t.completed).length`로 끝난다.
+
+### Q. useState와 useEffect의 실행 순서는?
+
+`useState`가 먼저, `useEffect`는 화면이 그려진 다음에 실행된다.
+
+```
+① useState 초기값 설정 → ② 화면 렌더링 → ③ useEffect 실행
+```
+
+localStorage 연동 예시:
+
+```tsx
+const [todos, setTodos] = useState([]);  // ① [] 로 시작
+
+useEffect(() => {
+  const saved = localStorage.getItem('todos');
+  setTodos(saved ? JSON.parse(saved) : []);  // ③ 화면 그려진 후 localStorage 읽어서 업데이트
+}, []);
+```
+
+```
+① useState([])    → todos = []
+② 화면 렌더링     → 빈 목록 표시 (아주 잠깐)
+③ useEffect 실행  → localStorage 읽어서 setTodos 호출
+④ 다시 렌더링     → 저장된 목록 표시
+```
+
+`useEffect`는 의존성 배열 안의 값이 바뀔 때마다 실행된다.
+
+```tsx
+useEffect(() => { ... }, []);        // 최초 1회
+useEffect(() => { ... }, [todos]);   // todos가 바뀔 때마다
+useEffect(() => { ... });            // 렌더링마다 (배열 자체가 없음)
+```

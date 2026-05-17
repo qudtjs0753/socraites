@@ -12,3 +12,4 @@ AI 동료가 내 수준·목표·학습 이력을 기억하고, 나만을 위한
 | 디렉토리 | 주제 |
 |---------|------|
 | `front_web/` | 프론트엔드 — React, Next.js, TanStack Query, Tailwind CSS |
+| `rag/` | RAG — LangChain, Chroma, Elasticsearch, K8S 배포 |
