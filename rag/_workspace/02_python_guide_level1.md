@@ -44,16 +44,16 @@ pip install --upgrade pip
 
 ```bash
 cat > requirements.txt <<'EOF'
-openai==1.54.4
 langchain==0.3.7
 langchain-openai==0.2.8
+langchain-huggingface==0.1.2
 langchain-community==0.3.7
 langchain-chroma==0.1.4
+sentence-transformers==3.3.1
 chromadb==0.5.20
 pypdf==5.1.0
 python-dotenv==1.0.1
 numpy==1.26.4
-tiktoken==0.8.0
 EOF
 
 pip install -r requirements.txt
@@ -63,11 +63,15 @@ pip install -r requirements.txt
 
 ### 1-3. `.env` 파일 설정
 
-OpenAI API 키를 코드에 직접 박지 않고 환경 변수로 분리합니다.
+LLM/임베딩 설정을 코드에 직접 박지 않고 환경 변수로 분리합니다.
 
 ```bash
 cat > .env <<'EOF'
-OPENAI_API_KEY=sk-여기에_실제_키_입력
+LLM_BASE_URL=http://사내-llm-서버/v1
+LLM_API_KEY=사내키
+LLM_MODEL=모델명
+EMBED_MODEL=BAAI/bge-m3
+EMBED_CACHE_DIR=./models   # python 실행 디렉토리 기준 상대경로
 EOF
 
 # git 사용 시 절대 커밋되지 않도록
@@ -75,15 +79,16 @@ cat > .gitignore <<'EOF'
 .venv/
 .env
 chroma_db/
+models/
 __pycache__/
 *.pyc
 EOF
 ```
 
-키가 잘 로딩되는지 확인:
+설정이 잘 로딩되는지 확인:
 
 ```bash
-python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('OK' if os.getenv('OPENAI_API_KEY','').startswith('sk-') else 'FAIL')"
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('OK' if os.getenv('LLM_BASE_URL') else 'FAIL')"
 # 출력: OK
 ```
 
@@ -99,16 +104,21 @@ python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('OK' 
 
 ```python
 # 목적: 임베딩이 무엇이고, 왜 "의미 검색"이 가능한지 직접 확인
-# 핵심 개념: 텍스트 → 1536차원 벡터 → 코사인 유사도
+# 핵심 개념: 텍스트 → 1024차원 벡터(BGE-M3) → 코사인 유사도
 # 실행: python 01_embedding_playground.py
 
 import os
 import numpy as np
 from dotenv import load_dotenv
-from openai import OpenAI
+from langchain_huggingface import HuggingFaceEmbeddings
 
 load_dotenv()
-client = OpenAI()  # OPENAI_API_KEY 자동 로딩
+
+# EMBED_CACHE_DIR: 수동 설치한 모델 경로 (python 실행 디렉토리 기준 상대경로)
+embeddings = HuggingFaceEmbeddings(
+    model_name=os.getenv("EMBED_MODEL", "BAAI/bge-m3"),
+    cache_folder=os.getenv("EMBED_CACHE_DIR", "./models"),
+)
 
 # (1) 비교할 문장들 — 의미가 비슷한 그룹과 다른 그룹을 섞어 봅니다
 texts = [
@@ -119,12 +129,10 @@ texts = [
     "쿠버네티스 Pod이 CrashLoopBackOff 상태입니다",            # 1번과 무관
 ]
 
-# (2) 임베딩 생성 — 한 번의 API 호출로 배치 처리
-EMBED_MODEL = "text-embedding-3-small"  # 1536차원, 저렴, 충분히 강력
-resp = client.embeddings.create(model=EMBED_MODEL, input=texts)
-vectors = [np.array(d.embedding) for d in resp.data]
+# (2) 임베딩 생성 — 배치로 한 번에 처리
+vectors = [np.array(v) for v in embeddings.embed_documents(texts)]
 
-print(f"임베딩 차원: {len(vectors[0])}")  # 1536
+print(f"임베딩 차원: {len(vectors[0])}")  # BGE-M3: 1024
 print(f"벡터 첫 5개 값(샘플): {vectors[0][:5]}\n")
 
 # (3) 코사인 유사도 — 벡터의 '방향'이 얼마나 같은가
@@ -147,7 +155,7 @@ python 01_embedding_playground.py
 ```
 
 ```
-임베딩 차원: 1536
+임베딩 차원: 1024
 벡터 첫 5개 값(샘플): [ 0.0123 -0.0456  0.0789  ... ]
 
 [기준 문장] RAG는 외부 문서를 활용해 LLM의 답변을 보강하는 기법입니다
@@ -201,7 +209,8 @@ import os
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 
@@ -218,8 +227,13 @@ chunks = RecursiveCharacterTextSplitter(
 ).split_documents(pages)
 print(f"[Index] 페이지 {len(pages)}개 → 청크 {len(chunks)}개")
 
-# (2) 벡터 DB: 있으면 재사용, 없으면 새로 임베딩
-embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+# (2) 임베딩: EMBED_CACHE_DIR에 수동 설치한 모델 로드 (python 실행 디렉토리 기준)
+embeddings = HuggingFaceEmbeddings(
+    model_name=os.getenv("EMBED_MODEL", "BAAI/bge-m3"),
+    cache_folder=os.getenv("EMBED_CACHE_DIR", "./models"),
+)
+
+# (3) 벡터 DB: 있으면 재사용, 없으면 새로 임베딩
 if os.path.exists(PERSIST_DIR) and os.listdir(PERSIST_DIR):
     vectorstore = Chroma(persist_directory=PERSIST_DIR, embedding_function=embeddings)
     print("[Index] 기존 Chroma DB 재사용 (임베딩 재계산 안 함)")
@@ -227,15 +241,20 @@ else:
     vectorstore = Chroma.from_documents(chunks, embeddings, persist_directory=PERSIST_DIR)
     print("[Index] 새 Chroma DB 생성 + 임베딩 저장")
 
-# (3) RAG 체인: 검색 k=3개 + 근거 반환
+# (4) RAG 체인: 사내 LLM 서버 + 검색 k=3개 + 근거 반환
 qa = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+    llm=ChatOpenAI(
+        base_url=os.getenv("LLM_BASE_URL"),
+        api_key=os.getenv("LLM_API_KEY"),
+        model=os.getenv("LLM_MODEL"),
+        temperature=0,
+    ),
     chain_type="stuff",
     retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
     return_source_documents=True,
 )
 
-# (4) 질문 루프
+# (5) 질문 루프
 while True:
     q = input("\n질문 (exit 입력 시 종료): ").strip()
     if q.lower() in {"exit", "quit", ""}:
@@ -301,11 +320,22 @@ python 02_pdf_rag.py
 - **왜 overlap?** 청크 경계에서 잘리는 정보 손실을 방지. 보통 `chunk_size`의 10% 정도.
 - *튜닝 포인트*: 기술 문서는 500~800, 대화록·블로그는 300~500이 흔합니다. Level 2에서 실험.
 
-### 4-3. `OpenAIEmbeddings(model="text-embedding-3-small")` — Embed
+### 4-3. `HuggingFaceEmbeddings(cache_folder=...)` — Embed
 
-- 청크 텍스트 → 1536차원 벡터.
-- LangChain이 내부적으로 배치(batch)·재시도까지 처리합니다. (수동으로 `client.embeddings.create` 호출하는 것보다 안전.)
-- 비용: 1M 토큰당 약 $0.02 (2026년 기준 — 변동 가능). 30페이지 PDF는 1센트도 안 듣니다.
+- 청크 텍스트 → 1024차원 벡터 (BGE-M3 기준).
+- `cache_folder`에 수동 설치된 모델을 로컬에서 로드합니다 — 외부 API 호출 없음, 비용 0.
+- LangChain이 내부적으로 배치(batch) 처리합니다.
+
+> **오프라인 모델 설치 필요** — 외부 PC에서 다운로드 후 폐쇄망으로 전달:
+> ```bash
+> # 외부 PC (인터넷 가능 환경)
+> pip install huggingface_hub
+> python -c "
+> from huggingface_hub import snapshot_download
+> snapshot_download('BAAI/bge-m3', local_dir='./models/BAAI/bge-m3')
+> "
+> # ./models/ 를 압축하여 전달
+> ```
 
 ### 4-4. `Chroma.from_documents(..., persist_directory=...)` — Store
 
@@ -343,7 +373,8 @@ python 02_pdf_rag.py
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| `openai.AuthenticationError` | `.env` 미로딩 또는 키 오타 | `python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(os.getenv('OPENAI_API_KEY')[:7])"` 확인 |
+| `ConnectionError` / `401` | `.env` 미로딩 또는 `LLM_BASE_URL`/`LLM_API_KEY` 오타 | `python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(os.getenv('LLM_BASE_URL'), os.getenv('LLM_API_KEY'))"` 확인 |
+| `OSError: model not found` | `EMBED_CACHE_DIR` 경로에 모델 없음 | `ls $EMBED_CACHE_DIR` 로 모델 폴더 존재 확인 |
 | `ImportError: langchain_chroma` | 패키지 미설치 | `pip install langchain-chroma` |
 | 답변이 항상 "모르겠습니다" | 청크가 너무 작거나 k=1 | `chunk_size` ↑, `k=3~5`로 조정 |
 | 답변에 PDF에 없는 내용 등장(환각) | 프롬프트가 LLM 자체 지식 허용 | Level 2의 커스텀 프롬프트로 "컨텍스트만 사용" 강제 |
@@ -401,10 +432,13 @@ python 02_pdf_rag.py
 ```
 ~/workspace/project/rag/_workspace/level1/
 ├── .venv/                       # 가상환경
-├── .env                         # OPENAI_API_KEY (커밋 금지)
+├── .env                         # LLM_BASE_URL, LLM_API_KEY, EMBED_CACHE_DIR 등 (커밋 금지)
 ├── .gitignore
 ├── requirements.txt
 ├── sample.pdf                   # 실습용 PDF
+├── models/                      # 수동 설치한 HuggingFace 모델 (커밋 금지)
+│   └── BAAI/
+│       └── bge-m3/
 ├── 01_embedding_playground.py
 ├── 02_pdf_rag.py
 └── chroma_db/                   # Chroma 영속 데이터 (자동 생성)

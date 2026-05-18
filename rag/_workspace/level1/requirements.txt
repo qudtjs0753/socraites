@@ -1,0 +1,10 @@
+langchain==0.3.7
+langchain-openai==0.2.8
+langchain-huggingface==0.1.2
+langchain-community==0.3.7
+langchain-chroma==0.1.4
+sentence-transformers==3.3.1
+chromadb==0.5.20
+openpyxl==3.1.5
+python-dotenv==1.0.1
+numpy==1.26.4
