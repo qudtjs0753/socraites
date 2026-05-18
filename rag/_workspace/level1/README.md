@@ -33,24 +33,57 @@ pytest test_load_csv.py -v
 
 ### 1-1. BGE-M3 모델 설치 (외부 PC → 폐쇄망 전달)
 
-인터넷 가능한 외부 PC에서 실행:
+**외부 PC (인터넷 가능 환경)에서 실행:**
 
 ```bash
 pip install huggingface_hub
+
 python -c "
 from huggingface_hub import snapshot_download
 snapshot_download('BAAI/bge-m3', local_dir='./models/BAAI/bge-m3')
 "
-# ./models/ 압축 후 폐쇄망으로 전달
 ```
 
-전달받은 `models/` 디렉토리를 이 디렉토리(`level1/`) 아래에 배치:
+다운로드 후 압축:
+
+```bash
+tar -czf bge-m3.tar.gz ./models
+```
+
+> `bge-m3.tar.gz` 파일을 메일 또는 파일 서버를 통해 폐쇄망으로 전달합니다.
+
+---
+
+**폐쇄망 PC (이 디렉토리에서)에서 실행:**
+
+```bash
+# level1/ 디렉토리에서 압축 해제
+tar -xzf bge-m3.tar.gz
+```
+
+해제 후 디렉토리 구조 확인:
 
 ```
 level1/
 └── models/
     └── BAAI/
         └── bge-m3/
+            ├── config.json
+            ├── tokenizer.json
+            └── ...
+```
+
+모델이 제대로 로드되는지 검증:
+
+```bash
+python -c "
+import os
+os.environ['EMBED_MODEL'] = 'BAAI/bge-m3'
+os.environ['EMBED_CACHE_DIR'] = './models'
+from langchain_huggingface import HuggingFaceEmbeddings
+emb = HuggingFaceEmbeddings(model_name='BAAI/bge-m3', cache_folder='./models')
+print('차원:', len(emb.embed_query('테스트')))  # 1024 출력되면 정상
+"
 ```
 
 ### 1-2. 가상환경 + 패키지 설치
