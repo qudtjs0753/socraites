@@ -166,36 +166,94 @@ Agent(
 
 ## 환경 제약 — 에이전트 필수 준수 사항
 
-**폐쇄망**: `pip install`은 가능. 외부 API(OpenAI 등) 사용 불가 가능. HuggingFace 모델·Docker 이미지는 외부 다운로드 필요.
+**폐쇄망**: `pip install`은 가능. OpenAI 외부 API 사용 불가 (`openai` 패키지·`langchain-openai` 설치 금지). HuggingFace 모델·Docker 이미지는 외부 다운로드 필요.
 
 모든 에이전트는 코드 예제 작성 시 다음을 준수한다:
 
-1. **LLM/임베딩 초기화** — 반드시 아래 표준 패턴 사용. 특정 API에 하드코딩 금지:
+1. **LLM/임베딩 초기화** — 반드시 아래 표준 패턴 사용. `openai`·`langchain-openai` 패키지 사용 금지:
    ```python
-   import os
-   from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-   # .env에서 사내 LLM 설정 → 엔드포인트만 바꾸면 어디서나 동작
-   llm = ChatOpenAI(
-       base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+   import os, requests
+   from typing import List, Optional, Any
+   from langchain_core.language_models.chat_models import BaseChatModel
+   from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
+   from langchain_core.outputs import ChatGeneration, ChatResult
+   from langchain_core.embeddings import Embeddings
+
+   class InternalChatLLM(BaseChatModel):
+       base_url: str = ""
+       api_key: str = ""
+       model_name: str = ""
+       temperature: float = 0
+
+       def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs) -> ChatResult:
+           role_map = {HumanMessage: "user", SystemMessage: "system", AIMessage: "assistant"}
+           resp = requests.post(
+               f"{self.base_url}/chat/completions",
+               json={"model": self.model_name, "messages": [{"role": role_map.get(type(m), "user"), "content": m.content} for m in messages], "temperature": self.temperature},
+               headers={"Authorization": f"Bearer {self.api_key}"},
+               timeout=60,
+           )
+           resp.raise_for_status()
+           return ChatResult(generations=[ChatGeneration(message=AIMessage(content=resp.json()["choices"][0]["message"]["content"]))])
+
+       @property
+       def _llm_type(self) -> str:
+           return "internal_llm"
+
+   class InternalEmbeddings(Embeddings):
+       def __init__(self, base_url: str, api_key: str, model: str):
+           self.base_url, self.api_key, self.model = base_url, api_key, model
+
+       def embed_documents(self, texts: List[str]) -> List[List[float]]:
+           return [self._embed(t) for t in texts]
+
+       def embed_query(self, text: str) -> List[float]:
+           return self._embed(text)
+
+       def _embed(self, text: str) -> List[float]:
+           resp = requests.post(
+               f"{self.base_url}/embeddings",
+               json={"model": self.model, "input": text},
+               headers={"Authorization": f"Bearer {self.api_key}"},
+               timeout=30,
+           )
+           resp.raise_for_status()
+           return resp.json()["data"][0]["embedding"]
+
+   llm = InternalChatLLM(
+       base_url=os.getenv("LLM_BASE_URL"),
        api_key=os.getenv("LLM_API_KEY"),
-       model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+       model_name=os.getenv("LLM_MODEL"),
        temperature=0,
    )
-   embeddings = OpenAIEmbeddings(
-       base_url=os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1"),
-       api_key=os.getenv("LLM_API_KEY"),
-       model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+   embeddings = InternalEmbeddings(
+       base_url=os.getenv("EMBED_BASE_URL"),
+       api_key=os.getenv("EMBED_API_KEY", os.getenv("LLM_API_KEY", "")),
+       model=os.getenv("EMBED_MODEL"),
    )
    ```
 
 2. **HuggingFace 모델** — 오프라인 절차 블록 추가:
    ```
    > **오프라인 다운로드 필요**
-   > 외부 PC: `huggingface-cli download {모델명} --local-dir ./모델명`
-   > 폴더를 압축 후 메일로 전달받아 동일 경로에 압축 해제
+   > 외부 PC:
+   > ```python
+   > from huggingface_hub import snapshot_download
+   > snapshot_download("{모델명}", cache_dir="./hf_cache")
+   > ```
+   > hf_cache/ 폴더를 zip으로 묶어 메일로 전달받아 동일 경로에 압축 해제
    ```
 
-3. **Reranking** — Cohere API(외부망 가능 시)와 BGE 리랭커(오프라인) 양쪽 모두 제시
+   HuggingFace 모델 사용 시 반드시 `local_files_only=True`와 `cache_folder`를 함께 지정한다:
+   ```python
+   HuggingFaceEmbeddings(
+       model_name="{모델명}",
+       cache_folder="./hf_cache",       # snapshot_download의 cache_dir과 동일
+       model_kwargs={"local_files_only": True},
+   )
+   ```
+
+3. **Reranking** — BGE 리랭커(오프라인) 사용. Cohere API(외부망 불가)는 언급하지 않는다
 
 4. **Docker 이미지** (Level 4) — `docker save`/`docker load` 절차 필수 포함:
    ```bash

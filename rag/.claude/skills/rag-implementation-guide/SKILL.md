@@ -20,12 +20,28 @@ LangChain과 LlamaIndex를 활용한 RAG 파이프라인 구현 가이드.
 ### 최소 RAG 파이프라인 (LangChain)
 
 ```python
-# pip install langchain langchain-openai chromadb
+# pip install langchain langchain-community langchain-chroma chromadb requests python-dotenv
+import os
+from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
+from internal_llm import InternalChatLLM, InternalEmbeddings  # 공통 모듈
+
+load_dotenv()
+
+llm = InternalChatLLM(
+    base_url=os.getenv("LLM_BASE_URL"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model_name=os.getenv("LLM_MODEL"),
+    temperature=0,
+)
+embeddings = InternalEmbeddings(
+    base_url=os.getenv("EMBED_BASE_URL"),
+    api_key=os.getenv("EMBED_API_KEY", os.getenv("LLM_API_KEY", "")),
+    model=os.getenv("EMBED_MODEL"),
+)
 
 # 1. 문서 로딩
 loader = PyPDFLoader("document.pdf")
@@ -38,13 +54,13 @@ chunks = splitter.split_documents(docs)
 # 3. 임베딩 + 벡터스토어 저장
 vectorstore = Chroma.from_documents(
     chunks,
-    embedding=OpenAIEmbeddings(),
+    embedding=embeddings,
     persist_directory="./chroma_db"
 )
 
 # 4. RAG 체인 구성
 qa_chain = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(model="gpt-4o-mini"),
+    llm=llm,
     retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
 )
 
@@ -127,12 +143,13 @@ app = workflow.compile()
 
 ```python
 from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 # 1. 가상 문서 생성 (질문에 대한 이상적인 답변처럼 작성)
 hyde_prompt = PromptTemplate.from_template(
     "다음 질문에 대한 가상의 학술 문서 단락을 작성하세요:\n질문: {question}\n단락:"
 )
-hyde_chain = hyde_prompt | ChatOpenAI() | StrOutputParser()
+hyde_chain = hyde_prompt | llm | StrOutputParser()
 
 hypothetical_doc = hyde_chain.invoke({"question": "RAG의 한계는?"})
 
@@ -167,10 +184,10 @@ print(result)
 
 ## 구현 시 공통 체크리스트
 
-- [ ] `OPENAI_API_KEY` 환경변수 설정
+- [ ] `.env` 파일에 `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `EMBED_BASE_URL`, `EMBED_API_KEY`, `EMBED_MODEL` 설정
+- [ ] `internal_llm.py` (InternalChatLLM + InternalEmbeddings) 공통 모듈 준비
 - [ ] 청크 크기 실험 (200~1000 토큰)
 - [ ] `k` 파라미터 조정 (검색 결과 수)
-- [ ] 임베딩 모델 선택 (OpenAI vs HuggingFace)
 - [ ] 벡터스토어 영속성 설정 (`persist_directory`)
 
 ## 관련 references

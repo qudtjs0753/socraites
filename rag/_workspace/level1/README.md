@@ -40,14 +40,14 @@ pip install huggingface_hub
 
 python -c "
 from huggingface_hub import snapshot_download
-snapshot_download('BAAI/bge-m3', local_dir='./models/BAAI/bge-m3')
+snapshot_download('BAAI/bge-m3', cache_dir='./hf_cache')
 "
 ```
 
 다운로드 후 압축:
 
 ```bash
-tar -czf bge-m3.tar.gz ./models
+tar -czf bge-m3.tar.gz ./hf_cache
 ```
 
 > `bge-m3.tar.gz` 파일을 메일 또는 파일 서버를 통해 폐쇄망으로 전달합니다.
@@ -65,12 +65,13 @@ tar -xzf bge-m3.tar.gz
 
 ```
 level1/
-└── models/
-    └── BAAI/
-        └── bge-m3/
-            ├── config.json
-            ├── tokenizer.json
-            └── ...
+└── hf_cache/
+    └── models--BAAI--bge-m3/
+        └── snapshots/
+            └── {hash}/
+                ├── config.json
+                ├── tokenizer.json
+                └── ...
 ```
 
 모델이 제대로 로드되는지 검증:
@@ -79,9 +80,9 @@ level1/
 python -c "
 import os
 os.environ['EMBED_MODEL'] = 'BAAI/bge-m3'
-os.environ['EMBED_CACHE_DIR'] = './models'
+os.environ['EMBED_CACHE_DIR'] = './hf_cache'
 from langchain_huggingface import HuggingFaceEmbeddings
-emb = HuggingFaceEmbeddings(model_name='BAAI/bge-m3', cache_folder='./models')
+emb = HuggingFaceEmbeddings(model_name='BAAI/bge-m3', cache_folder='./hf_cache', model_kwargs={'local_files_only': True})
 print('차원:', len(emb.embed_query('테스트')))  # 1024 출력되면 정상
 "
 ```
@@ -107,7 +108,7 @@ LLM_BASE_URL=http://사내-llm-서버/v1
 LLM_API_KEY=사내키
 LLM_MODEL=모델명
 EMBED_MODEL=BAAI/bge-m3
-EMBED_CACHE_DIR=./models
+EMBED_CACHE_DIR=./hf_cache
 ```
 
 > direnv 사용 시 `direnv allow` 한 번 실행하면 디렉토리 진입 시 `.env` + 가상환경이 자동 활성화됩니다.

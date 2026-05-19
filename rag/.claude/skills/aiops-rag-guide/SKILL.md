@@ -94,11 +94,36 @@ spec:
           ports:
             - containerPort: 8000
           env:
-            - name: OPENAI_API_KEY
+            - name: LLM_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rag-config
+                  key: llm-base-url
+            - name: LLM_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: rag-secrets
-                  key: openai-api-key
+                  key: llm-api-key
+            - name: LLM_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: rag-config
+                  key: llm-model
+            - name: EMBED_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rag-config
+                  key: embed-base-url
+            - name: EMBED_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rag-secrets
+                  key: embed-api-key
+            - name: EMBED_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: rag-config
+                  key: embed-model
             - name: CHROMA_HOST
               value: "chroma-svc.rag-system.svc.cluster.local"
           resources:

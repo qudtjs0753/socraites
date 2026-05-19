@@ -143,12 +143,21 @@ docker build -t rag-api:v1 .
 kind load docker-image rag-api:v1 --name rag-study
 ```
 
-### K8S Secret 생성 (API 키 관리)
+### K8S ConfigMap + Secret 생성 (사내 LLM 설정 관리)
 
 ```bash
-# OpenAI API 키를 K8S Secret으로 관리
+# URL·모델명은 ConfigMap (비밀 아님)
+kubectl create configmap rag-config \
+  --from-literal=llm-base-url="${LLM_BASE_URL}" \
+  --from-literal=llm-model="${LLM_MODEL}" \
+  --from-literal=embed-base-url="${EMBED_BASE_URL}" \
+  --from-literal=embed-model="${EMBED_MODEL}" \
+  -n rag-system
+
+# API 키는 Secret
 kubectl create secret generic rag-secrets \
-  --from-literal=openai-api-key="${OPENAI_API_KEY}" \
+  --from-literal=llm-api-key="${LLM_API_KEY}" \
+  --from-literal=embed-api-key="${EMBED_API_KEY}" \
   -n rag-system
 ```
 
@@ -476,7 +485,7 @@ with mlflow.start_run(run_name="rag-experiment-v1"):
         "chunk_size": 500,
         "overlap": 50,
         "retriever_type": "hybrid",
-        "llm": "gpt-4o-mini"
+        "llm": os.getenv("LLM_MODEL", "unknown"),
     })
     mlflow.log_metrics({
         "faithfulness": 0.88,
@@ -516,7 +525,7 @@ with mlflow.start_run(run_name="rag-experiment-v1"):
 **서비스 배포**
 - [ ] RAG FastAPI 도커 이미지 빌드 + Kind 로드
 - [ ] K8S Deployment + Service + HPA 배포
-- [ ] K8S Secret으로 API 키 안전 관리
+- [ ] K8S Secret(API 키) + ConfigMap(URL·모델명) 분리 관리
 
 **모니터링**
 - [ ] Prometheus RAG 메트릭 수집 확인

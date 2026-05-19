@@ -45,19 +45,22 @@ pip install --upgrade pip
 ```bash
 cat > requirements.txt <<'EOF'
 langchain==0.3.7
-langchain-openai==0.2.8
-langchain-huggingface==0.1.2
+langchain-core==0.3.15
 langchain-community==0.3.7
+langchain-huggingface==0.1.2
 langchain-chroma==0.1.4
 sentence-transformers==3.3.1
 chromadb==0.5.20
 pypdf==5.1.0
 python-dotenv==1.0.1
 numpy==1.26.4
+requests==2.32.3
 EOF
 
 pip install -r requirements.txt
 ```
+
+> `openai` 패키지와 `langchain-openai`는 사용하지 않습니다. 사내 LLM 서버에 `requests`로 직접 호출합니다.
 
 > K8S 비유로 보면 `requirements.txt`는 컨테이너 이미지 태그 핀(pin)과 같은 역할입니다. **재현 가능한 환경 = 디버깅 가능한 환경**입니다.
 
@@ -68,10 +71,10 @@ LLM/임베딩 설정을 코드에 직접 박지 않고 환경 변수로 분리�
 ```bash
 cat > .env <<'EOF'
 LLM_BASE_URL=http://사내-llm-서버/v1
-LLM_API_KEY=사내키
+LLM_API_KEY=사내_발급_키
 LLM_MODEL=모델명
 EMBED_MODEL=BAAI/bge-m3
-EMBED_CACHE_DIR=./models   # python 실행 디렉토리 기준 상대경로
+EMBED_CACHE_DIR=./hf_cache
 EOF
 
 # git 사용 시 절대 커밋되지 않도록
@@ -88,8 +91,62 @@ EOF
 설정이 잘 로딩되는지 확인:
 
 ```bash
-python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('OK' if os.getenv('LLM_BASE_URL') else 'FAIL')"
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('OK' if os.getenv('LLM_BASE_URL') else 'FAIL: LLM_BASE_URL 미설정')"
 # 출력: OK
+```
+
+### 1-4. 로컬 임베딩 모델 사용 (BAAI/bge-m3, 폐쇄망)
+
+> **오프라인 다운로드 필요** — 외부망 PC에서 `snapshot_download`로 hub 캐시 구조 그대로 받은 뒤, 폴더를 압축해 사내로 반입하세요.
+>
+> ```python
+> # 외부망 PC에서 실행 (huggingface_hub 설치 필요)
+> from huggingface_hub import snapshot_download
+>
+> snapshot_download(
+>     "BAAI/bge-m3",
+>     cache_dir="./hf_cache",   # models--BAAI--bge-m3/ 구조로 저장됨
+> )
+> # hf_cache/ 폴더를 zip으로 묶어 메일로 전달
+> ```
+
+사내 임베딩 REST API 대신 로컬에 내려받은 BAAI/bge-m3를 직접 쓰려면 추가 패키지가 필요합니다.
+
+```bash
+pip install sentence-transformers==3.3.1
+```
+
+**핵심: 재다운로드를 막는 두 가지 설정**
+
+`HuggingFaceEmbeddings`에 모델 이름만 넘기면 실행 때마다 HuggingFace Hub에 접속해 최신 버전을 확인합니다. 폐쇄망에서는 이 연결이 실패하거나 타임아웃이 반복됩니다. 아래 두 가지를 **반드시** 같이 써야 합니다.
+
+| 설정 | 역할 |
+|------|------|
+| `model_kwargs={"local_files_only": True}` | Hub 접속 없이 캐시만 사용 |
+| `cache_folder` | `snapshot_download`에 넘긴 `cache_dir`과 같은 경로 |
+
+```python
+# internal_llm.py 하단에 추가하거나 별도 파일로 분리 가능
+from langchain_community.embeddings import HuggingFaceEmbeddings
+
+HF_CACHE_DIR = os.path.expanduser("~/hf_cache")  # snapshot_download의 cache_dir과 동일
+
+local_embeddings = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-m3",
+    cache_folder=HF_CACHE_DIR,
+    model_kwargs={
+        "device": "cpu",           # GPU 없으면 cpu
+        "local_files_only": True,  # Hub 접속 차단 — 핵심 설정
+    },
+    encode_kwargs={"normalize_embeddings": True},
+)
+```
+
+**로컬 모델 동작 확인**
+
+```python
+print(local_embeddings.embed_query("테스트")[:3])
+# Hub 접속 없이 즉시 숫자 3개가 출력되면 성공
 ```
 
 ---
@@ -114,10 +171,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 load_dotenv()
 
-# EMBED_CACHE_DIR: 수동 설치한 모델 경로 (python 실행 디렉토리 기준 상대경로)
 embeddings = HuggingFaceEmbeddings(
     model_name=os.getenv("EMBED_MODEL", "BAAI/bge-m3"),
-    cache_folder=os.getenv("EMBED_CACHE_DIR", "./models"),
+    cache_folder=os.getenv("EMBED_CACHE_DIR", "./hf_cache"),
+    model_kwargs={"local_files_only": True},
+    encode_kwargs={"normalize_embeddings": True},
 )
 
 # (1) 비교할 문장들 — 의미가 비슷한 그룹과 다른 그룹을 섞어 봅니다
@@ -178,7 +236,7 @@ python 01_embedding_playground.py
 ### 2-4. 여기서 꼭 잡고 가야 할 포인트
 
 - **임베딩은 결정론적 함수**: 같은 텍스트 + 같은 모델 = 같은 벡터. → Chroma에 저장하면 재계산 불필요(비용 절감).
-- **차원 수(1536)는 모델이 정함**: 컬렉션을 만들 때 한 번 정해지면 같은 모델만 사용해야 함 (DA 경험과 동일: 스키마 호환성).
+- **차원 수는 모델이 정함**: 컬렉션을 만들 때 한 번 정해지면 같은 모델만 사용해야 함 (DA 경험과 동일: 스키마 호환성). 사내 모델 차원은 임베딩 담당자에게 확인.
 - **유사도는 "방향" 비교**: 길이(노름)는 무시. 그래서 코사인.
 - **0.6~0.8 사이가 흔히 보이는 "관련 있음" 영역**: 절대값보다 *상대 순위*가 중요.
 
@@ -198,6 +256,73 @@ curl -L -o sample.pdf "https://docs.python.org/3/archives/python-3.12.0-docs-pdf
 
 > 빠르게 돌려보려면 **10~30페이지짜리** PDF를 추천합니다(임베딩 비용·시간 절약).
 
+### 3-0. 공통 모듈 먼저 만들기 (`internal_llm.py`)
+
+모든 실습에서 재사용하는 사내 LLM/임베딩 래퍼입니다. **한 번만 만들면** 나머지 실습에서는 `from internal_llm import ...`으로 가져다 씁니다.
+
+```python
+# internal_llm.py — 사내 LLM/임베딩 래퍼 (공통 모듈)
+import requests
+from typing import List, Optional, Any
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.embeddings import Embeddings
+
+class InternalChatLLM(BaseChatModel):
+    """사내 LLM REST API 래퍼"""
+    base_url: str = ""
+    api_key: str = ""
+    model_name: str = ""
+    temperature: float = 0
+
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        role_map = {HumanMessage: "user", SystemMessage: "system", AIMessage: "assistant"}
+        resp = requests.post(
+            f"{self.base_url}/chat/completions",
+            json={
+                "model": self.model_name,
+                "messages": [{"role": role_map.get(type(m), "user"), "content": m.content} for m in messages],
+                "temperature": self.temperature,
+            },
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=resp.json()["choices"][0]["message"]["content"]))])
+
+    @property
+    def _llm_type(self) -> str:
+        return "internal_llm"
+
+class InternalEmbeddings(Embeddings):
+    """사내 임베딩 REST API 래퍼"""
+    def __init__(self, base_url: str, api_key: str, model: str):
+        self.base_url, self.api_key, self.model = base_url, api_key, model
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return [self._embed(t) for t in texts]
+
+    def embed_query(self, text: str) -> List[float]:
+        return self._embed(text)
+
+    def _embed(self, text: str) -> List[float]:
+        resp = requests.post(
+            f"{self.base_url}/embeddings",
+            json={"model": self.model, "input": text},
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["data"][0]["embedding"]
+```
+
 ### 3-2. 완전한 실행 코드 (`02_pdf_rag.py`, 핵심 ~30줄)
 
 ```python
@@ -210,14 +335,29 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
+from internal_llm import InternalChatLLM  # 공통 모듈
 
 load_dotenv()
 
 PDF_PATH = "sample.pdf"
 PERSIST_DIR = "./chroma_db"
+
+# 사내 LLM 초기화 (requests 직접 호출 — openai 패키지 불필요)
+llm = InternalChatLLM(
+    base_url=os.getenv("LLM_BASE_URL"),
+    api_key=os.getenv("LLM_API_KEY"),
+    model_name=os.getenv("LLM_MODEL"),
+    temperature=0,
+)
+# 임베딩: 로컬 HuggingFace 모델 (local_files_only=True → Hub 접속 차단)
+embeddings = HuggingFaceEmbeddings(
+    model_name=os.getenv("EMBED_MODEL", "BAAI/bge-m3"),
+    cache_folder=os.getenv("EMBED_CACHE_DIR", "./hf_cache"),
+    model_kwargs={"local_files_only": True},
+    encode_kwargs={"normalize_embeddings": True},
+)
 
 # (1) 로딩 + 청킹
 pages = PyPDFLoader(PDF_PATH).load()
@@ -227,13 +367,7 @@ chunks = RecursiveCharacterTextSplitter(
 ).split_documents(pages)
 print(f"[Index] 페이지 {len(pages)}개 → 청크 {len(chunks)}개")
 
-# (2) 임베딩: EMBED_CACHE_DIR에 수동 설치한 모델 로드 (python 실행 디렉토리 기준)
-embeddings = HuggingFaceEmbeddings(
-    model_name=os.getenv("EMBED_MODEL", "BAAI/bge-m3"),
-    cache_folder=os.getenv("EMBED_CACHE_DIR", "./models"),
-)
-
-# (3) 벡터 DB: 있으면 재사용, 없으면 새로 임베딩
+# (2) 벡터 DB: 있으면 재사용, 없으면 새로 임베딩
 if os.path.exists(PERSIST_DIR) and os.listdir(PERSIST_DIR):
     vectorstore = Chroma(persist_directory=PERSIST_DIR, embedding_function=embeddings)
     print("[Index] 기존 Chroma DB 재사용 (임베딩 재계산 안 함)")
@@ -243,12 +377,7 @@ else:
 
 # (4) RAG 체인: 사내 LLM 서버 + 검색 k=3개 + 근거 반환
 qa = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(
-        base_url=os.getenv("LLM_BASE_URL"),
-        api_key=os.getenv("LLM_API_KEY"),
-        model=os.getenv("LLM_MODEL"),
-        temperature=0,
-    ),
+    llm=llm,
     chain_type="stuff",
     retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
     return_source_documents=True,
@@ -320,22 +449,12 @@ python 02_pdf_rag.py
 - **왜 overlap?** 청크 경계에서 잘리는 정보 손실을 방지. 보통 `chunk_size`의 10% 정도.
 - *튜닝 포인트*: 기술 문서는 500~800, 대화록·블로그는 300~500이 흔합니다. Level 2에서 실험.
 
-### 4-3. `HuggingFaceEmbeddings(cache_folder=...)` — Embed
+### 4-3. `HuggingFaceEmbeddings(cache_folder=..., local_files_only=True)` — Embed
 
 - 청크 텍스트 → 1024차원 벡터 (BGE-M3 기준).
-- `cache_folder`에 수동 설치된 모델을 로컬에서 로드합니다 — 외부 API 호출 없음, 비용 0.
+- `cache_folder`에 `snapshot_download(cache_dir=)`로 받아둔 모델을 로컬에서 로드합니다 — 외부 API 호출 없음, 비용 0.
+- `local_files_only=True`가 핵심: 이 옵션 없이 실행하면 매번 HuggingFace Hub 접속을 시도해 타임아웃이 반복됩니다.
 - LangChain이 내부적으로 배치(batch) 처리합니다.
-
-> **오프라인 모델 설치 필요** — 외부 PC에서 다운로드 후 폐쇄망으로 전달:
-> ```bash
-> # 외부 PC (인터넷 가능 환경)
-> pip install huggingface_hub
-> python -c "
-> from huggingface_hub import snapshot_download
-> snapshot_download('BAAI/bge-m3', local_dir='./models/BAAI/bge-m3')
-> "
-> # ./models/ 를 압축하여 전달
-> ```
 
 ### 4-4. `Chroma.from_documents(..., persist_directory=...)` — Store
 
@@ -373,13 +492,16 @@ python 02_pdf_rag.py
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| `ConnectionError` / `401` | `.env` 미로딩 또는 `LLM_BASE_URL`/`LLM_API_KEY` 오타 | `python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(os.getenv('LLM_BASE_URL'), os.getenv('LLM_API_KEY'))"` 확인 |
-| `OSError: model not found` | `EMBED_CACHE_DIR` 경로에 모델 없음 | `ls $EMBED_CACHE_DIR` 로 모델 폴더 존재 확인 |
+| `requests.exceptions.ConnectionError` | `.env` 미로딩 또는 `LLM_BASE_URL` 오타 | `python -c "from dotenv import load_dotenv; import os; load_dotenv(); print(os.getenv('LLM_BASE_URL'))"` 확인 |
+| `requests.exceptions.HTTPError: 401` | `LLM_API_KEY` 오류 | 사내 LLM 담당자에게 키 재발급 요청 |
+| `OSError: model not found` | `EMBED_CACHE_DIR` 경로에 모델 없음 | `ls $EMBED_CACHE_DIR` 로 `models--BAAI--bge-m3/` 폴더 존재 확인 |
 | `ImportError: langchain_chroma` | 패키지 미설치 | `pip install langchain-chroma` |
 | 답변이 항상 "모르겠습니다" | 청크가 너무 작거나 k=1 | `chunk_size` ↑, `k=3~5`로 조정 |
 | 답변에 PDF에 없는 내용 등장(환각) | 프롬프트가 LLM 자체 지식 허용 | Level 2의 커스텀 프롬프트로 "컨텍스트만 사용" 강제 |
 | 두 번째 실행이 더 느림 | `persist_directory` 미지정 → 매번 재임베딩 | 코드의 분기(`if os.path.exists`) 확인 |
 | 한글 PDF 인코딩 깨짐 | `PyPDFLoader`가 일부 한글 PDF 약함 | `PyPDFLoader` → `PyMuPDFLoader`(별도 설치: `pip install pymupdf`)로 교체 |
+| 로컬 모델인데 실행마다 재다운로드 시도 | `local_files_only=True` 누락 또는 `cache_folder` 경로 불일치 | 1-4절 참고: `model_kwargs={"local_files_only": True}` 추가, `cache_folder`가 실제 모델 상위 디렉토리인지 확인 |
+| `OSError: ... does not appear to have a file named config.json` | 절대 경로 오류 — 스냅샷 해시 하위까지 지정해야 할 수 있음 | 방법 B에서 경로를 `ls ~/models/bge-m3/` 로 확인 후 재지정 |
 
 ---
 
@@ -435,6 +557,7 @@ python 02_pdf_rag.py
 ├── .env                         # LLM_BASE_URL, LLM_API_KEY, EMBED_CACHE_DIR 등 (커밋 금지)
 ├── .gitignore
 ├── requirements.txt
+├── internal_llm.py              # 사내 LLM/임베딩 공통 모듈
 ├── sample.pdf                   # 실습용 PDF
 ├── models/                      # 수동 설치한 HuggingFace 모델 (커밋 금지)
 │   └── BAAI/

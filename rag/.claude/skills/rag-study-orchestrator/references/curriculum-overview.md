@@ -75,8 +75,8 @@ Level 1 (2주)          Level 2 (3주)          Level 3 (3주)          Level 4 
 ```
 RAG 애플리케이션 레이어
 ├── Framework:     LangChain, LlamaIndex
-├── LLM:          사내 LLM (OpenAI 호환 API) ✓ | OpenAI GPT-4o (외부망 가능 시) | HuggingFace 로컬 [오프라인 다운로드]
-├── Embedding:    사내 임베딩 (OpenAI 호환 API) ✓ | OpenAI API (외부망 가능 시) | BGE [오프라인 다운로드]
+├── LLM:          사내 LLM (REST API, requests 직접 호출) ✓ | HuggingFace 로컬 [오프라인 다운로드]
+├── Embedding:    사내 임베딩 (REST API, requests 직접 호출) ✓ | BGE [오프라인 다운로드]
 └── Evaluation:   RAGAS (pip) ✓ | LangSmith (API) ✓
 
 검색/저장 레이어
@@ -96,8 +96,8 @@ RAG 애플리케이션 레이어
 
 | 항목 | 종류 | 외부 다운로드 방법 |
 |------|------|----------------|
-| `BAAI/bge-reranker-v2-m3` | HuggingFace 모델 | `huggingface-cli download BAAI/bge-reranker-v2-m3` |
-| `BAAI/bge-m3` | HuggingFace 모델 | `huggingface-cli download BAAI/bge-m3` |
+| `BAAI/bge-reranker-v2-m3` | HuggingFace 모델 | `snapshot_download("BAAI/bge-reranker-v2-m3", cache_dir="./hf_cache")` |
+| `BAAI/bge-m3` | HuggingFace 모델 | `snapshot_download("BAAI/bge-m3", cache_dir="./hf_cache")` |
 | Elasticsearch 8.x | Docker 이미지 | `docker pull elasticsearch:8.15.0 && docker save -o es.tar elasticsearch:8.15.0` |
 | Kibana 8.x | Docker 이미지 | 동일 방식 |
 | Prometheus | Docker 이미지 | `docker pull prom/prometheus && docker save -o prometheus.tar prom/prometheus` |
