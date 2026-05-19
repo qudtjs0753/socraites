@@ -1,7 +1,7 @@
 """
 실습 1: 임베딩 + 코사인 유사도 직접 체험
 핵심 개념: 텍스트 → 1024차원 벡터(BGE-M3) → 코사인 유사도
-실행: python 01_embedding_playground.py
+실행: python embedding_playground.py
 """
 
 import os
@@ -15,6 +15,7 @@ load_dotenv()
 embeddings = HuggingFaceEmbeddings(
     model_name=os.getenv("EMBED_MODEL", "BAAI/bge-m3"),
     cache_folder=os.getenv("EMBED_CACHE_DIR", "./models"),
+    model_kwargs={'local_files_only': True}
 )
 
 # 비교할 문장들 — 의미가 비슷한 그룹과 다른 그룹을 섞어 봅니다

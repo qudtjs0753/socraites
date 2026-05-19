@@ -1,10 +1,15 @@
 langchain==0.3.7
-langchain-openai==0.2.8
-langchain-huggingface==0.1.2
+langchain-core==0.3.17
 langchain-community==0.3.7
+langchain-huggingface==0.1.2
+huggingface_hub==0.27.1
 langchain-chroma==0.1.4
 sentence-transformers==3.3.1
 chromadb==0.5.20
 openpyxl==3.1.5
+pillow==12.2.0
+pytesseract==0.3.13
 python-dotenv==1.0.1
 numpy==1.26.4
+requests==2.32.3
+pytest==9.0.3

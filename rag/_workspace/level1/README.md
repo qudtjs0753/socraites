@@ -1,6 +1,28 @@
 # Level 1 실습 — 기초 RAG
 
-## 빠른 시작 (회사 첫 실행)
+## 파일 구성
+
+| 파일 | 설명 |
+|------|------|
+| `embedding_playground.py` | 임베딩 + 코사인 유사도 체험 |
+| `rag_pipeline.py` | 다중 파일 형식 → Chroma → Q&A 봇 |
+| `test_loaders.py` | 파일 로더 단위 테스트 |
+| `requirements.txt` | 패키지 목록 |
+
+### 지원 파일 형식
+
+| 형식 | 확장자 |
+|------|--------|
+| CSV | `.csv` |
+| Excel | `.xlsx`, `.xls` |
+| 텍스트 | `.txt`, `.md`, `.log` |
+| 이미지(OCR) | `.jpg`, `.jpeg`, `.png` |
+
+> PDF는 지원하지 않습니다. 필요 시 별도 추가.
+
+---
+
+## 빠른 시작
 
 ```bash
 # 1. 가상환경 생성 + 활성화
@@ -13,23 +35,11 @@ pip install -r requirements.txt
 # 3. 환경변수 설정
 cp .env.example .env
 # .env 열어서 사내 LLM 서버 정보 + 모델 경로 입력
-
-# 4. CSV 로딩 테스트 (모델 없어도 실행 가능)
-pytest test_load_csv.py -v
 ```
 
 ---
 
-## 파일 구성
-
-| 파일 | 설명 |
-|------|------|
-| `01_embedding_playground.py` | 임베딩 + 코사인 유사도 체험 |
-| `02_csv_excel_rag.py` | CSV/Excel → Chroma → Q&A 봇 |
-
----
-
-## 1. 최초 셋업
+## 1. 셋업
 
 ### 1-1. BGE-M3 모델 설치 (외부 PC → 폐쇄망 전달)
 
@@ -42,39 +52,30 @@ python -c "
 from huggingface_hub import snapshot_download
 snapshot_download('BAAI/bge-m3', cache_dir='./hf_cache')
 "
-```
 
-다운로드 후 압축:
-
-```bash
 tar -czf bge-m3.tar.gz ./hf_cache
 ```
 
 > `bge-m3.tar.gz` 파일을 메일 또는 파일 서버를 통해 폐쇄망으로 전달합니다.
 
----
-
 **폐쇄망 PC (이 디렉토리에서)에서 실행:**
 
 ```bash
-# level1/ 디렉토리에서 압축 해제
 tar -xzf bge-m3.tar.gz
 ```
 
-해제 후 디렉토리 구조 확인:
+해제 후 디렉토리 구조:
 
 ```
 level1/
 └── hf_cache/
     └── models--BAAI--bge-m3/
-        └── snapshots/
-            └── {hash}/
-                ├── config.json
-                ├── tokenizer.json
-                └── ...
+        └── snapshots/{hash}/
+            ├── config.json
+            └── ...
 ```
 
-모델이 제대로 로드되는지 검증:
+모델 로드 검증:
 
 ```bash
 python -c "
@@ -97,11 +98,7 @@ pip install -r requirements.txt
 
 ### 1-3. 환경변수 설정
 
-```bash
-cp .env.example .env
-```
-
-`.env`를 열어 사내 값으로 수정:
+`.env` 파일 생성 후 사내 값으로 수정:
 
 ```
 LLM_BASE_URL=http://사내-llm-서버/v1
@@ -111,42 +108,71 @@ EMBED_MODEL=BAAI/bge-m3
 EMBED_CACHE_DIR=./hf_cache
 ```
 
-> direnv 사용 시 `direnv allow` 한 번 실행하면 디렉토리 진입 시 `.env` + 가상환경이 자동 활성화됩니다.
-
 ---
 
-## 2. 실습 1 — 임베딩 체험
+## 2. 테스트
+
+파일 로더 단위 테스트는 LLM/임베딩 모델 없이 실행 가능합니다.
 
 ```bash
-python 01_embedding_playground.py
+# 전체 테스트
+pytest test_loaders.py -v
+
+# 특정 클래스만
+pytest test_loaders.py::TestLoadCsv -v
+pytest test_loaders.py::TestLoadExcel -v
+pytest test_loaders.py::TestLoadText -v
+pytest test_loaders.py::TestLoadImage -v
+pytest test_loaders.py::TestLoadDataDir -v
 ```
 
-임베딩 차원 수와 문장 간 코사인 유사도가 출력됩니다. 의미가 가까운 문장일수록 점수가 높게 나오면 정상입니다.
+### 테스트 항목
+
+| 클래스 | 테스트 수 | 내용 |
+|--------|----------|------|
+| `TestLoadCsv` | 9 | 기본 변환, 메타데이터, 빈 값 제거, 인코딩(utf-8/euc-kr) |
+| `TestLoadExcel` | 5 | 단일/다중 시트, None 셀, 빈 시트 처리 |
+| `TestLoadText` | 5 | TXT/MD/LOG, cp949, 빈 파일 처리 |
+| `TestLoadImage` | 3 | OCR 추출, 빈 이미지, pytesseract 미설치 예외 |
+| `TestLoadDataDir` | 3 | 혼합 파일 일괄 로드, 미지원 확장자 무시 |
+
+> `TestLoadImage`는 `pytesseract`가 설치되지 않은 환경에서 자동으로 skip됩니다.
 
 ---
 
-## 3. 실습 2 — CSV/Excel Q&A 봇
+## 3. 실습 1 — 임베딩 체험
 
-CSV 또는 Excel 파일을 `data/` 디렉토리에 준비합니다:
+```bash
+python embedding_playground.py
+```
+
+임베딩 차원 수와 문장 간 코사인 유사도가 출력됩니다.
+
+---
+
+## 4. 실습 2 — 다중 파일 Q&A 봇
+
+`data/` 디렉토리에 지원 파일을 준비합니다:
 
 ```bash
 mkdir -p data
 cp /path/to/데이터.csv data/
 cp /path/to/데이터.xlsx data/
+cp /path/to/문서.txt data/
 ```
 
 실행:
 
 ```bash
-python 02_csv_excel_rag.py
+python rag_pipeline.py
 ```
 
-- 첫 실행: 각 행을 청킹 + 임베딩 후 `chroma_db/`에 저장
-- 두 번째 실행부터: `chroma_db/` 재사용 (임베딩 재계산 없음)
+- 첫 실행: 파일 로드 → 청킹 → 임베딩 → `chroma_db/`에 저장
+- 재실행: `chroma_db/` 재사용 (임베딩 재계산 없음)
 
-파일을 교체하거나 다시 인덱싱하려면 `chroma_db/`를 삭제하고 재실행합니다:
+인덱스 초기화:
 
 ```bash
 rm -rf chroma_db/
-python 02_csv_excel_rag.py
+python rag_pipeline.py
 ```

@@ -1,6 +1,6 @@
 .venv/
 .env
 chroma_db/
-models/
+hf_cache/
 __pycache__/
 *.pyc
