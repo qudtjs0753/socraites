@@ -97,13 +97,17 @@ python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('OK' 
 
 ### 1-4. 로컬 임베딩 모델 사용 (BAAI/bge-m3, 폐쇄망)
 
-> **오프라인 다운로드 필요** — 외부망 PC에서 아래 명령어로 모델을 다운로드한 뒤, 압축해서 사내로 반입하세요.
+> **오프라인 다운로드 필요** — 외부망 PC에서 `snapshot_download`로 hub 캐시 구조 그대로 받은 뒤, 폴더를 압축해 사내로 반입하세요.
 >
-> ```bash
-> # 외부망 PC에서 실행
-> pip install huggingface-hub
-> huggingface-cli download BAAI/bge-m3 --local-dir ./bge-m3
-> # bge-m3/ 디렉토리를 zip으로 묶어 메일로 전달
+> ```python
+> # 외부망 PC에서 실행 (huggingface_hub 설치 필요)
+> from huggingface_hub import snapshot_download
+>
+> snapshot_download(
+>     "BAAI/bge-m3",
+>     cache_dir="./hf_cache",   # models--BAAI--bge-m3/ 구조로 저장됨
+> )
+> # hf_cache/ 폴더를 zip으로 묶어 메일로 전달
 > ```
 
 사내 임베딩 REST API 대신 로컬에 내려받은 BAAI/bge-m3를 직접 쓰려면 추가 패키지가 필요합니다.
@@ -119,57 +123,28 @@ pip install sentence-transformers==3.3.1
 | 설정 | 역할 |
 |------|------|
 | `model_kwargs={"local_files_only": True}` | Hub 접속 없이 캐시만 사용 |
-| `cache_folder` 또는 절대 경로 | 모델이 있는 위치를 명시 |
-
-**방법 A — `cache_folder` + `local_files_only` (권장)**
-
-모델이 `~/models/bge-m3/` 에 있다면:
+| `cache_folder` | `snapshot_download`에 넘긴 `cache_dir`과 같은 경로 |
 
 ```python
 # internal_llm.py 하단에 추가하거나 별도 파일로 분리 가능
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
-LOCAL_MODEL_DIR = os.path.expanduser("~/models")   # bge-m3/ 폴더가 있는 상위 디렉토리
+HF_CACHE_DIR = os.path.expanduser("~/hf_cache")  # snapshot_download의 cache_dir과 동일
 
 local_embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-m3",         # 폴더명 기준으로 탐색
-    cache_folder=LOCAL_MODEL_DIR,      # 실제 파일 위치
+    model_name="BAAI/bge-m3",
+    cache_folder=HF_CACHE_DIR,
     model_kwargs={
-        "device": "cpu",               # GPU 없으면 cpu
-        "local_files_only": True,      # Hub 접속 차단 — 핵심 설정
+        "device": "cpu",           # GPU 없으면 cpu
+        "local_files_only": True,  # Hub 접속 차단 — 핵심 설정
     },
     encode_kwargs={"normalize_embeddings": True},
 )
 ```
 
-**방법 B — 절대 경로로 바로 지정**
-
-캐시 구조를 신경 쓰기 싫을 때 가장 단순합니다.
-
-```python
-local_embeddings = HuggingFaceEmbeddings(
-    model_name="/home/user/models/bge-m3",  # 모델 파일이 있는 디렉토리 경로
-    model_kwargs={"device": "cpu"},
-    encode_kwargs={"normalize_embeddings": True},
-)
-```
-
-**방법 C — 환경 변수로 전역 차단 (스크립트 실행 전)**
-
-```bash
-export HF_HOME=~/models          # 모델 캐시 루트
-export HF_HUB_OFFLINE=1          # Hub 접속 전역 차단
-export TRANSFORMERS_OFFLINE=1    # transformers 라이브러리도 차단
-
-python 01_embedding_playground.py
-```
-
-> 방법 C는 프로세스 전체에 적용되므로 다른 패키지까지 오프라인으로 강제됩니다. 개발 편의보다 운영 환경에 더 적합합니다.
-
 **로컬 모델 동작 확인**
 
 ```python
-# 모델이 제대로 로컬에서 로딩되는지 확인
 print(local_embeddings.embed_query("테스트")[:3])
 # Hub 접속 없이 즉시 숫자 3개가 출력되면 성공
 ```

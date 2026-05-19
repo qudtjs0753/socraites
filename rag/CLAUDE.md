@@ -88,7 +88,10 @@ LLM은 `requests`로 사내 서버에 직접 연결한다(`openai` 패키지 불
 
 **에이전트 지침:**
 - 모든 LLM/임베딩 초기화는 위 표준 패턴 사용 — `openai` 패키지 또는 `langchain-openai` 사용 금지
-- HuggingFace 모델이 필요한 실습에는 `> 오프라인 다운로드 필요` 블록과 다운로드 방법을 함께 제시
+- HuggingFace 모델이 필요한 실습에는 `> 오프라인 다운로드 필요` 블록과 아래 표준 다운로드/사용 패턴을 함께 제시:
+  - **다운로드 (외부망 PC)**: `snapshot_download("{모델명}", cache_dir="./hf_cache")` — hub 캐시 구조(`models--{org}--{name}/`)로 저장
+  - **사용 (사내 PC)**: `HuggingFaceEmbeddings(model_name="{모델명}", cache_folder="./hf_cache", model_kwargs={"local_files_only": True})`
+  - `local_dir` 방식(`huggingface-cli download --local-dir`) 사용 금지 — hub 캐시 구조와 달라 `cache_folder` 연동 불가
 - Docker 이미지가 필요한 실습에는 `docker save`/`docker load` 절차를 포함
 - Reranking: BGE 리랭커(오프라인) 사용. Cohere API(외부망 불가)는 언급하지 않는다
 

@@ -282,15 +282,28 @@ results = ensemble.invoke("한국어 RAG 구현 방법")
 ### Reranking — 검색 후 재순위
 
 > **오프라인 다운로드 필요**
-> 외부 PC: `huggingface-cli download BAAI/bge-reranker-v2-m3 --local-dir ./bge-reranker-v2-m3`
-> 폴더를 압축 후 메일로 전달받아 동일 경로에 압축 해제
+> 외부 PC:
+> ```python
+> from huggingface_hub import snapshot_download
+> snapshot_download("BAAI/bge-reranker-v2-m3", cache_dir="./hf_cache")
+> ```
+> hf_cache/ 폴더를 zip으로 묶어 메일로 전달받아 동일 경로에 압축 해제
 
 **BGE Reranker (오프라인 오픈소스):**
 ```python
-# pip install FlagEmbedding
+# pip install FlagEmbedding huggingface_hub
+from huggingface_hub import snapshot_download
 from FlagEmbedding import FlagReranker
 
-reranker = FlagReranker("BAAI/bge-reranker-v2-m3", use_fp16=True)  # 한국어 지원
+HF_CACHE_DIR = "./hf_cache"  # snapshot_download의 cache_dir과 동일
+
+# local_files_only=True로 Hub 접속 없이 캐시에서 경로 반환
+model_path = snapshot_download(
+    "BAAI/bge-reranker-v2-m3",
+    cache_dir=HF_CACHE_DIR,
+    local_files_only=True,
+)
+reranker = FlagReranker(model_path, use_fp16=True)  # 한국어 지원
 
 # 쌍별 점수 계산
 pairs = [(query, doc.page_content) for doc in candidate_docs]

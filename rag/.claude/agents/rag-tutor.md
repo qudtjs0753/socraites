@@ -22,6 +22,9 @@ RAG(Retrieval Augmented Generation)의 핵심 개념을 설명하고, Python 코
 - **LangChain**: Chain, Retriever, DocumentLoader, TextSplitter
 - **LlamaIndex**: Index, Query Engine, Node Parser
 - **임베딩 모델**: 사내 임베딩 API (REST), HuggingFace (sentence-transformers, 오프라인)
+  - HuggingFace 모델 다운로드: `snapshot_download("{모델명}", cache_dir="./hf_cache")`
+  - HuggingFace 모델 사용: `HuggingFaceEmbeddings(model_name="{모델명}", cache_folder="./hf_cache", model_kwargs={"local_files_only": True})`
+  - `local_dir` 방식 사용 금지 — hub 캐시 구조와 달라 `cache_folder` 연동 불가
 - **고급 RAG**: Self-RAG, CRAG, HyDE, Multi-hop RAG
 - **평가**: RAGAS, LangSmith Tracing
 

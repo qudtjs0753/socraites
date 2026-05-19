@@ -236,8 +236,21 @@ Agent(
 2. **HuggingFace 모델** — 오프라인 절차 블록 추가:
    ```
    > **오프라인 다운로드 필요**
-   > 외부 PC: `huggingface-cli download {모델명} --local-dir ./모델명`
-   > 폴더를 압축 후 메일로 전달받아 동일 경로에 압축 해제
+   > 외부 PC:
+   > ```python
+   > from huggingface_hub import snapshot_download
+   > snapshot_download("{모델명}", cache_dir="./hf_cache")
+   > ```
+   > hf_cache/ 폴더를 zip으로 묶어 메일로 전달받아 동일 경로에 압축 해제
+   ```
+
+   HuggingFace 모델 사용 시 반드시 `local_files_only=True`와 `cache_folder`를 함께 지정한다:
+   ```python
+   HuggingFaceEmbeddings(
+       model_name="{모델명}",
+       cache_folder="./hf_cache",       # snapshot_download의 cache_dir과 동일
+       model_kwargs={"local_files_only": True},
+   )
    ```
 
 3. **Reranking** — BGE 리랭커(오프라인) 사용. Cohere API(외부망 불가)는 언급하지 않는다

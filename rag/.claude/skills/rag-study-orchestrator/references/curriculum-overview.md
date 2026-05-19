@@ -96,8 +96,8 @@ RAG 애플리케이션 레이어
 
 | 항목 | 종류 | 외부 다운로드 방법 |
 |------|------|----------------|
-| `BAAI/bge-reranker-v2-m3` | HuggingFace 모델 | `huggingface-cli download BAAI/bge-reranker-v2-m3` |
-| `BAAI/bge-m3` | HuggingFace 모델 | `huggingface-cli download BAAI/bge-m3` |
+| `BAAI/bge-reranker-v2-m3` | HuggingFace 모델 | `snapshot_download("BAAI/bge-reranker-v2-m3", cache_dir="./hf_cache")` |
+| `BAAI/bge-m3` | HuggingFace 모델 | `snapshot_download("BAAI/bge-m3", cache_dir="./hf_cache")` |
 | Elasticsearch 8.x | Docker 이미지 | `docker pull elasticsearch:8.15.0 && docker save -o es.tar elasticsearch:8.15.0` |
 | Kibana 8.x | Docker 이미지 | 동일 방식 |
 | Prometheus | Docker 이미지 | `docker pull prom/prometheus && docker save -o prometheus.tar prom/prometheus` |
