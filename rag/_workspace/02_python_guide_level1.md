@@ -95,6 +95,85 @@ python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('OK' 
 # 출력: OK
 ```
 
+### 1-4. 로컬 임베딩 모델 사용 (BAAI/bge-m3, 폐쇄망)
+
+> **오프라인 다운로드 필요** — 외부망 PC에서 아래 명령어로 모델을 다운로드한 뒤, 압축해서 사내로 반입하세요.
+>
+> ```bash
+> # 외부망 PC에서 실행
+> pip install huggingface-hub
+> huggingface-cli download BAAI/bge-m3 --local-dir ./bge-m3
+> # bge-m3/ 디렉토리를 zip으로 묶어 메일로 전달
+> ```
+
+사내 임베딩 REST API 대신 로컬에 내려받은 BAAI/bge-m3를 직접 쓰려면 추가 패키지가 필요합니다.
+
+```bash
+pip install sentence-transformers==3.3.1
+```
+
+**핵심: 재다운로드를 막는 두 가지 설정**
+
+`HuggingFaceEmbeddings`에 모델 이름만 넘기면 실행 때마다 HuggingFace Hub에 접속해 최신 버전을 확인합니다. 폐쇄망에서는 이 연결이 실패하거나 타임아웃이 반복됩니다. 아래 두 가지를 **반드시** 같이 써야 합니다.
+
+| 설정 | 역할 |
+|------|------|
+| `model_kwargs={"local_files_only": True}` | Hub 접속 없이 캐시만 사용 |
+| `cache_folder` 또는 절대 경로 | 모델이 있는 위치를 명시 |
+
+**방법 A — `cache_folder` + `local_files_only` (권장)**
+
+모델이 `~/models/bge-m3/` 에 있다면:
+
+```python
+# internal_llm.py 하단에 추가하거나 별도 파일로 분리 가능
+from langchain_community.embeddings import HuggingFaceEmbeddings
+
+LOCAL_MODEL_DIR = os.path.expanduser("~/models")   # bge-m3/ 폴더가 있는 상위 디렉토리
+
+local_embeddings = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-m3",         # 폴더명 기준으로 탐색
+    cache_folder=LOCAL_MODEL_DIR,      # 실제 파일 위치
+    model_kwargs={
+        "device": "cpu",               # GPU 없으면 cpu
+        "local_files_only": True,      # Hub 접속 차단 — 핵심 설정
+    },
+    encode_kwargs={"normalize_embeddings": True},
+)
+```
+
+**방법 B — 절대 경로로 바로 지정**
+
+캐시 구조를 신경 쓰기 싫을 때 가장 단순합니다.
+
+```python
+local_embeddings = HuggingFaceEmbeddings(
+    model_name="/home/user/models/bge-m3",  # 모델 파일이 있는 디렉토리 경로
+    model_kwargs={"device": "cpu"},
+    encode_kwargs={"normalize_embeddings": True},
+)
+```
+
+**방법 C — 환경 변수로 전역 차단 (스크립트 실행 전)**
+
+```bash
+export HF_HOME=~/models          # 모델 캐시 루트
+export HF_HUB_OFFLINE=1          # Hub 접속 전역 차단
+export TRANSFORMERS_OFFLINE=1    # transformers 라이브러리도 차단
+
+python 01_embedding_playground.py
+```
+
+> 방법 C는 프로세스 전체에 적용되므로 다른 패키지까지 오프라인으로 강제됩니다. 개발 편의보다 운영 환경에 더 적합합니다.
+
+**로컬 모델 동작 확인**
+
+```python
+# 모델이 제대로 로컬에서 로딩되는지 확인
+print(local_embeddings.embed_query("테스트")[:3])
+# Hub 접속 없이 즉시 숫자 3개가 출력되면 성공
+```
+
 ---
 
 ## 2. 실습 1 — 임베딩 직접 체험
@@ -446,6 +525,8 @@ python 02_pdf_rag.py
 | 답변에 PDF에 없는 내용 등장(환각) | 프롬프트가 LLM 자체 지식 허용 | Level 2의 커스텀 프롬프트로 "컨텍스트만 사용" 강제 |
 | 두 번째 실행이 더 느림 | `persist_directory` 미지정 → 매번 재임베딩 | 코드의 분기(`if os.path.exists`) 확인 |
 | 한글 PDF 인코딩 깨짐 | `PyPDFLoader`가 일부 한글 PDF 약함 | `PyPDFLoader` → `PyMuPDFLoader`(별도 설치: `pip install pymupdf`)로 교체 |
+| 로컬 모델인데 실행마다 재다운로드 시도 | `local_files_only=True` 누락 또는 `cache_folder` 경로 불일치 | 1-4절 참고: `model_kwargs={"local_files_only": True}` 추가, `cache_folder`가 실제 모델 상위 디렉토리인지 확인 |
+| `OSError: ... does not appear to have a file named config.json` | 절대 경로 오류 — 스냅샷 해시 하위까지 지정해야 할 수 있음 | 방법 B에서 경로를 `ls ~/models/bge-m3/` 로 확인 후 재지정 |
 
 ---
 
