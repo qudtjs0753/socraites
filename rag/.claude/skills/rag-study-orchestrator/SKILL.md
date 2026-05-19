@@ -168,6 +168,8 @@ Agent(
 
 **폐쇄망**: `pip install`은 가능. OpenAI 외부 API 사용 불가 (`openai` 패키지·`langchain-openai` 설치 금지). HuggingFace 모델·Docker 이미지는 외부 다운로드 필요.
 
+**지원 파일 형식**: CSV, Excel(.xlsx/.xls), TXT, MD, LOG, 이미지(JPG/JPEG/PNG). **PDF는 지원하지 않는다.** 새 형식이 필요하면 `LOADERS` dict에 추가하는 방식으로 안내한다.
+
 모든 에이전트는 코드 예제 작성 시 다음을 준수한다:
 
 1. **LLM/임베딩 초기화** — 반드시 아래 표준 패턴 사용. `openai`·`langchain-openai` 패키지 사용 금지:

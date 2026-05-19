@@ -13,7 +13,7 @@
 
 2주 후 달성 목표:
 - RAG가 왜 필요한지, 어떻게 동작하는지 설명 가능
-- LangChain으로 PDF → 청킹 → Chroma → 검색 → 생성 파이프라인 구현
+- LangChain으로 CSV/Excel/TXT/MD/LOG/이미지 → 청킹 → Chroma → 검색 → 생성 파이프라인 구현
 - 30줄 이내의 동작하는 RAG Q&A 봇 완성
 
 ---
@@ -85,19 +85,70 @@ print(f"문장 1-3 유사도: {cosine_similarity(embeddings[0], embeddings[2]):.
 
 **설치:**
 ```bash
-pip install langchain langchain-core langchain-community langchain-chroma chromadb pypdf python-dotenv requests numpy
+pip install langchain langchain-core langchain-community langchain-chroma chromadb \
+            openpyxl pillow pytesseract python-dotenv requests numpy
+# OS 패키지 (이미지 OCR용): brew install tesseract tesseract-lang  # macOS
+#                           apt-get install tesseract-ocr tesseract-ocr-kor  # Ubuntu
 ```
+
+**지원 파일 형식:**
+
+| 확장자 | 처리 방식 |
+|--------|----------|
+| `.csv` | 행별 Document (DictReader) |
+| `.xlsx` / `.xls` | 시트별 행 단위 Document (openpyxl) |
+| `.txt` / `.md` / `.log` | 파일 전체 → TextSplitter 청킹 |
+| `.jpg` / `.jpeg` / `.png` | pytesseract OCR → 텍스트 추출 |
+
+> PDF는 사용하지 않는다.
 
 **Document Loader — 문서 읽기:**
 ```python
-from langchain_community.document_loaders import PyPDFLoader, TextLoader, WebBaseLoader
+import csv, glob, os
+from pathlib import Path
+from langchain.schema import Document
 
-# PDF 로딩
-loader = PyPDFLoader("document.pdf")
-pages = loader.load()
-print(f"페이지 수: {len(pages)}")
-print(f"첫 페이지 내용: {pages[0].page_content[:200]}")
-print(f"메타데이터: {pages[0].metadata}")  # {'source': 'document.pdf', 'page': 0}
+def load_csv(path):
+    with open(path, encoding="utf-8-sig") as f:
+        return [Document(page_content="\n".join(f"{k}: {v}" for k, v in row.items() if v),
+                         metadata={"source": os.path.basename(path), "row": i})
+                for i, row in enumerate(csv.DictReader(f))]
+
+def load_text(path):
+    try: text = Path(path).read_text(encoding="utf-8")
+    except UnicodeDecodeError: text = Path(path).read_text(encoding="cp949", errors="replace")
+    return [Document(page_content=text, metadata={"source": os.path.basename(path)})] if text.strip() else []
+
+def load_image(path):
+    from PIL import Image
+    import pytesseract
+    text = pytesseract.image_to_string(Image.open(path), lang="kor+eng")
+    return [Document(page_content=text, metadata={"source": os.path.basename(path)})] if text.strip() else []
+
+def load_excel(path):
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    docs = []
+    for sheet in wb.sheetnames:
+        rows = list(wb[sheet].iter_rows(values_only=True))
+        if not rows: continue
+        headers = [str(h) if h else f"col{i}" for i, h in enumerate(rows[0])]
+        docs += [Document(page_content="\n".join(f"{headers[j]}: {v}" for j, v in enumerate(row) if v is not None),
+                          metadata={"source": os.path.basename(path), "sheet": sheet, "row": i})
+                 for i, row in enumerate(rows[1:], 1)]
+    return docs
+
+LOADERS = {".csv": load_csv, ".xlsx": load_excel, ".xls": load_excel,
+           ".txt": load_text, ".md": load_text, ".log": load_text,
+           ".jpg": load_image, ".jpeg": load_image, ".png": load_image}
+
+# data/ 디렉토리 일괄 로드
+docs = [doc for ext, loader in LOADERS.items()
+        for path in glob.glob(f"./data/*{ext}")
+        for doc in loader(path)]
+print(f"로드된 Document 수: {len(docs)}")
+print(f"첫 Document 내용: {docs[0].page_content[:200]}")
+print(f"메타데이터: {docs[0].metadata}")
 ```
 
 **Text Splitter — 청킹:**
@@ -123,10 +174,12 @@ print(f"청크 예시: {chunks[0].page_content}")
 ### Day 5-7: 첫 RAG 파이프라인 완성
 
 ```python
-# pip install langchain langchain-core langchain-community langchain-chroma chromadb pypdf python-dotenv requests
-import os
+# pip install langchain langchain-core langchain-community langchain-chroma chromadb
+#             openpyxl pillow pytesseract requests python-dotenv
+import csv, glob, os
+from pathlib import Path
 from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
+from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
@@ -147,11 +200,47 @@ embeddings = InternalEmbeddings(
     model=os.getenv("EMBED_MODEL"),
 )
 
-# 1. 문서 로딩 및 청킹
-loader = PyPDFLoader("your_document.pdf")
+def load_csv(path):
+    with open(path, encoding="utf-8-sig") as f:
+        return [Document(page_content="\n".join(f"{k}: {v}" for k, v in row.items() if v),
+                         metadata={"source": os.path.basename(path), "row": i})
+                for i, row in enumerate(csv.DictReader(f))]
+
+def load_text(path):
+    try: text = Path(path).read_text(encoding="utf-8")
+    except UnicodeDecodeError: text = Path(path).read_text(encoding="cp949", errors="replace")
+    return [Document(page_content=text, metadata={"source": os.path.basename(path)})] if text.strip() else []
+
+def load_excel(path):
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    docs = []
+    for sheet in wb.sheetnames:
+        rows = list(wb[sheet].iter_rows(values_only=True))
+        if not rows: continue
+        headers = [str(h) if h else f"col{i}" for i, h in enumerate(rows[0])]
+        docs += [Document(page_content="\n".join(f"{headers[j]}: {v}" for j, v in enumerate(row) if v is not None),
+                          metadata={"source": os.path.basename(path), "sheet": sheet, "row": i})
+                 for i, row in enumerate(rows[1:], 1)]
+    return docs
+
+def load_image(path):
+    from PIL import Image
+    import pytesseract
+    text = pytesseract.image_to_string(Image.open(path), lang="kor+eng")
+    return [Document(page_content=text, metadata={"source": os.path.basename(path)})] if text.strip() else []
+
+LOADERS = {".csv": load_csv, ".xlsx": load_excel, ".xls": load_excel,
+           ".txt": load_text, ".md": load_text, ".log": load_text,
+           ".jpg": load_image, ".jpeg": load_image, ".png": load_image}
+
+# 1. data/ 디렉토리 일괄 로드 및 청킹
+docs = [doc for ext, loader in LOADERS.items()
+        for path in glob.glob(f"./data/*{ext}")
+        for doc in loader(path)]
 chunks = RecursiveCharacterTextSplitter(
     chunk_size=500, chunk_overlap=50
-).split_documents(loader.load())
+).split_documents(docs)
 
 # 2. 벡터 DB 구축 (첫 실행 후 persist_directory 지정으로 재사용)
 vectorstore = Chroma.from_documents(
@@ -281,16 +370,16 @@ qa_chain = RetrievalQA.from_chain_type(
 
 ## 핵심 실습 프로젝트
 
-**"나만의 PDF Q&A 봇" 완성**
+**"다중 파일 Q&A 봇" 완성**
 
 요구사항:
-1. PDF 파일 1개 이상 지원
+1. CSV / Excel / TXT / MD / LOG / 이미지(JPG·PNG) 혼합 지원
 2. Chroma DB 영속성 (재실행 시 임베딩 재계산 없음)
-3. 근거 페이지 번호 표시
+3. 근거 파일명·행 번호 표시
 4. "모르면 모른다고" 하는 프롬프트
 
 ```
-추천 문서: 파이썬 공식 문서 한국어 번역, 기술 블로그 PDF
+추천 데이터: 사내 운영 로그(.log), 장애 보고서(.md), 설정 목록(.csv)
 ```
 
 ---
@@ -303,13 +392,13 @@ qa_chain = RetrievalQA.from_chain_type(
 - [ ] 청크 크기와 overlap의 trade-off 설명 가능
 
 **구현 능력**
-- [ ] PDF → Chroma DB 인덱싱 코드 직접 작성 가능
+- [ ] CSV/Excel/TXT/MD/LOG/이미지 → Chroma DB 인덱싱 코드 직접 작성 가능
 - [ ] 기존 Chroma DB 재로딩 가능 (임베딩 비용 절약)
 - [ ] 커스텀 프롬프트 템플릿 적용 가능
 
 **실습 완성**
-- [ ] 동작하는 PDF Q&A 봇 완성
-- [ ] 근거 문서와 함께 답변 반환 확인
+- [ ] 동작하는 다중 파일 Q&A 봇 완성
+- [ ] 근거 파일명·행 번호와 함께 답변 반환 확인
 - [ ] 관련 없는 질문 시 "모른다" 응답 확인
 
 **다음 단계 준비**

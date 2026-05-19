@@ -17,13 +17,26 @@ LangChain과 LlamaIndex를 활용한 RAG 파이프라인 구현 가이드.
 질문 → [Embedding] → [Similarity Search] → [Retrieved Docs] → [LLM] → 답변
 ```
 
+### 지원 파일 형식
+
+| 확장자 | 로더 | 비고 |
+|--------|------|------|
+| `.csv` | `csv.DictReader` | 행별 Document 생성 |
+| `.xlsx` / `.xls` | `openpyxl` | 시트별 행 단위 Document 생성 |
+| `.txt` / `.md` / `.log` | `Path.read_text()` | 파일 전체 → 청킹 |
+| `.jpg` / `.jpeg` / `.png` | `pytesseract` OCR | 이미지 텍스트 추출 |
+
+> PDF는 지원하지 않는다.
+
 ### 최소 RAG 파이프라인 (LangChain)
 
 ```python
-# pip install langchain langchain-community langchain-chroma chromadb requests python-dotenv
-import os
+# pip install langchain langchain-community langchain-chroma chromadb
+#             openpyxl pillow pytesseract requests python-dotenv
+import csv, glob, os
+from pathlib import Path
 from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
+from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
@@ -43,28 +56,59 @@ embeddings = InternalEmbeddings(
     model=os.getenv("EMBED_MODEL"),
 )
 
-# 1. 문서 로딩
-loader = PyPDFLoader("document.pdf")
-docs = loader.load()
+# 1. 파일 형식별 로더
+def load_csv(path):
+    with open(path, encoding="utf-8-sig") as f:
+        return [Document(page_content="\n".join(f"{k}: {v}" for k, v in row.items() if v),
+                         metadata={"source": os.path.basename(path), "row": i})
+                for i, row in enumerate(csv.DictReader(f)) if any(row.values())]
 
-# 2. 청킹 — chunk_size와 overlap은 문서 특성에 맞게 조정
-splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-chunks = splitter.split_documents(docs)
+def load_excel(path):
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    docs = []
+    for sheet in wb.sheetnames:
+        rows = list(wb[sheet].iter_rows(values_only=True))
+        if not rows: continue
+        headers = [str(h) if h else f"col{i}" for i, h in enumerate(rows[0])]
+        docs += [Document(page_content="\n".join(f"{headers[j]}: {v}" for j, v in enumerate(row) if v is not None),
+                          metadata={"source": os.path.basename(path), "sheet": sheet, "row": i})
+                 for i, row in enumerate(rows[1:], 1) if any(v is not None for v in row)]
+    return docs
 
-# 3. 임베딩 + 벡터스토어 저장
-vectorstore = Chroma.from_documents(
-    chunks,
-    embedding=embeddings,
-    persist_directory="./chroma_db"
-)
+def load_text(path):
+    try: text = Path(path).read_text(encoding="utf-8")
+    except UnicodeDecodeError: text = Path(path).read_text(encoding="cp949", errors="replace")
+    return [Document(page_content=text, metadata={"source": os.path.basename(path)})] if text.strip() else []
 
-# 4. RAG 체인 구성
+def load_image(path):
+    from PIL import Image
+    import pytesseract
+    text = pytesseract.image_to_string(Image.open(path), lang="kor+eng")
+    return [Document(page_content=text, metadata={"source": os.path.basename(path)})] if text.strip() else []
+
+LOADERS = {".csv": load_csv, ".xlsx": load_excel, ".xls": load_excel,
+           ".txt": load_text, ".md": load_text, ".log": load_text,
+           ".jpg": load_image, ".jpeg": load_image, ".png": load_image}
+
+# 2. data/ 디렉토리 일괄 로드
+docs = [doc for ext, loader in LOADERS.items()
+        for path in glob.glob(f"./data/*{ext}")
+        for doc in loader(path)]
+
+# 3. 청킹 — chunk_size와 overlap은 문서 특성에 맞게 조정
+chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50).split_documents(docs)
+
+# 4. 임베딩 + 벡터스토어 저장
+vectorstore = Chroma.from_documents(chunks, embedding=embeddings, persist_directory="./chroma_db")
+
+# 5. RAG 체인 구성
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
 )
 
-# 5. 질문
+# 6. 질문
 result = qa_chain.invoke("RAG란 무엇인가요?")
 print(result["result"])
 ```

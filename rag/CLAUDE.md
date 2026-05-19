@@ -94,6 +94,8 @@ LLM은 `requests`로 사내 서버에 직접 연결한다(`openai` 패키지 불
   - `local_dir` 방식(`huggingface-cli download --local-dir`) 사용 금지 — hub 캐시 구조와 달라 `cache_folder` 연동 불가
 - Docker 이미지가 필요한 실습에는 `docker save`/`docker load` 절차를 포함
 - Reranking: BGE 리랭커(오프라인) 사용. Cohere API(외부망 불가)는 언급하지 않는다
+- **테스트 필수**: 새 로더·유틸리티 함수를 구현할 때는 반드시 pytest 테스트를 함께 작성한다. README에도 `pytest <테스트파일> -v` 실행 방법을 포함한다
+- **문서 동기화 필수**: 코드·파일명·지원 형식·실행 방법 등을 변경할 때는 반드시 해당 레벨의 `README.md`도 함께 수정한다. 코드와 문서가 불일치한 상태로 작업을 마치지 않는다
 
 ## 에이전트 팀
 

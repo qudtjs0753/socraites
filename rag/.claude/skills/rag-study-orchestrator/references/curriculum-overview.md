@@ -109,17 +109,17 @@ RAG 애플리케이션 레이어
 ## 레벨별 핵심 산출물
 
 ### Level 1 산출물
-- [ ] `01_basic_rag.py` — PDF 기반 Q&A 봇 (30줄)
+- [ ] `rag_pipeline.py` — 다중 파일(CSV/Excel/TXT/MD/LOG/이미지) Q&A 봇
 - [ ] `chroma_db/` — 영속적 Chroma 컬렉션
 
 ### Level 2 산출물
-- [ ] `02_hybrid_search.py` — Chroma + BM25 하이브리드
-- [ ] `03_es_korean_rag.py` — Elasticsearch Nori + RAG
+- [ ] `hybrid_search.py` — Chroma + BM25 하이브리드
+- [ ] `es_korean_rag.py` — Elasticsearch Nori + RAG
 - [ ] Recall@5 측정 결과 비교표
 
 ### Level 3 산출물
-- [ ] `04_self_rag.py` — LangGraph 기반 Self-RAG
-- [ ] `05_ragas_evaluation.py` — 자동화 평가 파이프라인
+- [ ] `self_rag.py` — LangGraph 기반 Self-RAG
+- [ ] `ragas_evaluation.py` — 자동화 평가 파이프라인
 - [ ] RAGAS 지표 개선 보고서
 
 ### Level 4 산출물
