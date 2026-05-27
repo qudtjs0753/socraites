@@ -24,13 +24,16 @@ export default function StopwatchApp() {
     return () => window.removeEventListener('resize', handleResize); // cleanup
   }, []);
 
-  const seconds = (elapsed / 1000).toFixed(2);
+  const ms = elapsed % 1000;
+  const s = Math.floor(elapsed / 1000) % 60;
+  const m = Math.floor(elapsed / 60000);
+  const display = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(Math.floor(ms / 10)).padStart(2, '0')}`;
 
   return (
     <main className="p-8 space-y-6">
       <section>
         <h1 className="text-2xl font-bold">Stopwatch</h1>
-        <p className="text-4xl font-mono mt-2">{seconds}s</p>
+        <p className="text-4xl font-mono mt-2">{display}</p>
         <div className="flex gap-2 mt-4">
           <button
             onClick={() => setRunning(true)}

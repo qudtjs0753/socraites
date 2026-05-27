@@ -8,11 +8,17 @@
 
 **학습자 수준:** JS 코드를 일부 이해하는 초입자. 전문 용어 첫 등장 시 한국어 설명 병기. 비유와 최소 코드 예제 활용.
 
-**변경 이력:**
+## 예제 생성 필수 규칙
 
-| 날짜 | 변경 내용 | 대상 | 사유 |
-|------|----------|------|------|
-| 2026-05-14 | 초기 구성 | 전체 | 프론트엔드 학습 하네스 신규 구축 |
-| 2026-05-14 | 예제 출력 형식 개선 | workshop-guide, concept-explainer | README 파일명+cp 명령어 명시, concepts.md 항상 생성 |
-| 2026-05-15 | 예제 자동 복사 + 심화 Q&A 기록 | workshop-guide, concept-explainer | 예제 생성 시 my-first-app에 자동 복사, 몰랐던 개념 ⚠️ 표기 |
-| 2026-05-15 | 확장 과제 Q&A 기록 | workshop-guide | 확장 과제 구현 중 나온 질문·해결책·장단점을 README.md Q&A 기록 섹션에 추가 |
+예제를 생성할 때 아래 항목을 **빠짐없이** 이행한다.
+
+| # | 규칙 | 담당 에이전트 |
+|---|------|-------------|
+| 1 | `concepts.md` 반드시 생성 — 개념 설명은 README가 아닌 concepts.md에 작성 | workshop-guide, concept-explainer |
+| 2 | `README.md`에 원본 파일명과 `cp` 명령어 명시 | workshop-guide |
+| 3 | 예제 생성 후 `_workspace/my-first-app`에 자동 복사 | workshop-guide |
+| 4 | 파일은 `_workspace/my-first-app/app/<full-slug>/page.tsx` 경로에 배치 (루트 app/ 오배치 금지, 슬러그 축약 금지) | workshop-guide |
+| 5 | concepts.md에서 학습자가 몰랐던 개념에 ⚠️ 표기 | concept-explainer |
+| 6 | `README.md`에 Q&A 기록 섹션 포함 — 확장 과제 중 나온 질문·해결책·장단점 기록 | workshop-guide |
+
+> 변경 이력 → [docs/changelog.md](./docs/changelog.md)

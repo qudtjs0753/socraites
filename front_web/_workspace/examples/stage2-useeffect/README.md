@@ -24,11 +24,19 @@ npm run dev
 # http://localhost:3000/stage2
 ```
 
-## 핵심 개념
+## 개념 참고
+
+→ **[concepts.md](./concepts.md)** — useEffect 기본 원리, 의존성 배열, cleanup, 흔한 실수 정리
+
+---
+
+## 이 예제에서 다루는 패턴
 
 ### 1. cleanup 함수 — 타이머 정리
 
-`useEffect`가 반환하는 함수는 **다음 effect가 실행되기 직전** 또는 **컴포넌트가 사라질 때** 호출된다. 정리하지 않으면 setInterval이 계속 살아남아 메모리 누수와 중복 실행이 발생한다.
+`useEffect`가 반환하는 함수는
+**다음 effect가 실행되기 직전** 또는 **컴포넌트가 사라질 때** 호출된다.
+정리하지 않으면 setInterval이 계속 살아남아 메모리 누수와 중복 실행이 발생한다.
 
 ```tsx
 useEffect(() => {
@@ -44,7 +52,8 @@ WHY: `running`이 `true → false`로 바뀌면 effect가 재실행되기 전에
 
 ### 2. setInterval + useEffect 연동
 
-interval은 외부 시스템(브라우저 타이머)이라 React 상태 흐름 바깥에 있다. `useEffect`로 감싸야 컴포넌트의 생명주기와 동기화할 수 있다.
+interval은 외부 시스템(브라우저 타이머)이라 React 상태 흐름 바깥에 있다.
+`useEffect`로 감싸야 컴포넌트의 생명주기와 동기화할 수 있다.
 
 ```tsx
 const id = setInterval(() => {

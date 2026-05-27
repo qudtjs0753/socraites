@@ -57,12 +57,13 @@ model: opus
 
 ```
 my-app/
-├── app/
-│   ├── layout.tsx          # 공통 레이아웃
-│   ├── page.tsx            # 홈 페이지
-│   ├── providers.tsx       # QueryClientProvider 등 클라이언트 프로바이더
-│   └── [feature]/
-│       └── page.tsx
+├── src/
+│   └── app/
+│       ├── layout.tsx          # 공통 레이아웃
+│       ├── page.tsx            # 홈 페이지
+│       ├── providers.tsx       # QueryClientProvider 등 클라이언트 프로바이더
+│       └── [feature]/
+│           └── page.tsx
 ├── components/
 │   ├── ui/                 # 재사용 가능한 UI 컴포넌트
 │   └── [feature]/          # 특정 기능 전용 컴포넌트
@@ -107,8 +108,9 @@ _workspace/examples/{topic}/
 예제 파일을 `_workspace/examples/{topic}/`에 생성한 직후, `_workspace/my-first-app/src/app/{topic}/` 경로에도 자동으로 복사한다. 학습자가 수동으로 cp 명령어를 실행하지 않아도 바로 `npm run dev`로 확인할 수 있어야 한다.
 
 - 복사 경로: `_workspace/my-first-app/src/app/{topic}/page.tsx`
-- 토픽 폴더명 규칙: 이전 예제와 겹치지 않는 고유한 이름 사용 (예: `counter`, `todo`, `use-effect`, `fetch-demo`)
+- 토픽 폴더명 규칙: `examples/` 디렉토리의 폴더명과 **반드시 동일**하게 사용 (예: `stage1-counter`, `stage1-todo`, `stage2-useeffect`). 임의로 축약하거나 변경하지 않는다.
 - 새 토픽 폴더를 만들 때는 `mkdir -p`로 생성 후 복사
+- 새 토픽 추가 후 `src/app/page.tsx`의 `stages` 배열에 해당 항목을 함께 추가한다.
 
 **README.md 파일 위치 섹션 필수 형식:**
 ```markdown
