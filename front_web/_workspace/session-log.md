@@ -1,5 +1,26 @@
 # 학습 세션 로그
 
+## 세션 3 (2026-05-29)
+
+**진행 단계**: Stage 2 — React 심화 (2/3)
+
+### 학습 내용
+- 커스텀 훅이란 무엇인가 (로직 재사용, `use` prefix 규칙)
+- `useLocalStorage<T>` 구현 (useState + useEffect 조합, SSR 가드)
+- `useToggle` 구현 (useCallback으로 toggle 함수 안정화)
+- 실습: LocalMemo 앱 (커스텀 훅으로 메모장 구현)
+
+### 생성 파일
+- `_workspace/examples/stage2-custom-hooks/page.tsx` — LocalMemo 실습 코드
+- `_workspace/examples/stage2-custom-hooks/concepts.md` — 커스텀 훅 개념 설명
+- `_workspace/examples/stage2-custom-hooks/README.md` — 실습 가이드
+- `_workspace/my-first-app/src/app/stage2-custom-hooks/page.tsx` — 자동 복사
+
+### 다음 세션 주제
+- Context API (전역 상태 관리)
+
+---
+
 ## 세션 2 (2026-05-20)
 
 **진행 단계**: Stage 2 — React 심화 (1/3)

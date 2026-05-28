@@ -35,8 +35,8 @@
 - [x] useEffect 기초 (의존성 배열, 실행 순서, localStorage 연동에서 실습)
 
 ### Stage 2 주제
-- [ ] useEffect 심화 (cleanup, 타이머, 이벤트 리스너)
-- [ ] 커스텀 훅 (useLocalStorage 등 로직 재사용)
+- [x] useEffect 심화 (cleanup, 타이머, 이벤트 리스너)
+- [x] 커스텀 훅 (useLocalStorage 등 로직 재사용)
 - [ ] Context API (전역 상태 관리)
 - [ ] 실습: 심화 앱
 
